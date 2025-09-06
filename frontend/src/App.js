@@ -1,12 +1,18 @@
 import React from "react";
-import LoginButton from "./components/LoginButton";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import AuthCallback from "./components/AuthCallback";
+import Dashboard from "./pages/Dashboard";
+import HomePage from "./pages/HomePage";
 
 function App() {
   return (
-    <div>
-      <h1>Commentify</h1>
-      <LoginButton />
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/auth-callback" element={<AuthCallback />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/" element={<HomePage />} />
+      </Routes>
+    </Router>
   );
 }
 

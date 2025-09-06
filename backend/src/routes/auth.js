@@ -1,17 +1,153 @@
 import express from "express";
 import dotenv from "dotenv";
+import querystring from "querystring";
+import axios from "axios";
 
 dotenv.config();
 const router = express.Router();
 
+// Spotify OAuth scopes
+const SCOPES = [
+  "user-read-private",
+  "user-read-email",
+  "playlist-read-private",
+  "playlist-read-collaborative",
+  "playlist-modify-public",
+  "playlist-modify-private"
+];
+
 router.get("/login", (req, res) => {
-  const scope = "user-read-private user-read-email";
   const redirect_uri = process.env.SPOTIFY_REDIRECT_URI;
   const client_id = process.env.SPOTIFY_CLIENT_ID;
 
   res.redirect(
-    `https://accounts.spotify.com/authorize?response_type=code&client_id=${client_id}&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(redirect_uri)}`
+    "https://accounts.spotify.com/authorize?" +
+    querystring.stringify({
+      response_type: "code",
+      client_id: client_id,
+      scope: SCOPES.join(" "),
+      redirect_uri: redirect_uri,
+      show_dialog: true // Always show the auth dialog for better UX
+    })
   );
+});
+
+router.get("/callback", async (req, res) => {
+  const code = req.query.code || null;
+  const redirect_uri = process.env.SPOTIFY_REDIRECT_URI;
+  const client_id = process.env.SPOTIFY_CLIENT_ID;
+  const client_secret = process.env.SPOTIFY_CLIENT_SECRET;
+
+  console.log('Received callback with code:', code);
+  console.log('Redirect URI:', redirect_uri);
+
+  if (code) {
+    try {
+      // Exchange code for tokens
+      const response = await axios.post("https://accounts.spotify.com/api/token", 
+        querystring.stringify({
+          code: code,
+          redirect_uri: redirect_uri,
+          grant_type: "authorization_code"
+        }), {
+          headers: {
+            "Authorization": "Basic " + Buffer.from(client_id + ":" + client_secret).toString("base64"),
+            "Content-Type": "application/x-www-form-urlencoded"
+          }
+        }
+      );
+
+      const { access_token, refresh_token, expires_in } = response.data;
+
+      // In a production environment, you would store these tokens securely
+      // For now, we'll send them to the frontend
+      const redirectUrl = `http://localhost:3000/auth-callback?${querystring.stringify({
+        access_token,
+        refresh_token,
+        expires_in
+      })}`;
+      
+      // Send HTML that will redirect and pass tokens
+      res.send(`
+        <html>
+          <body>
+            <script>
+              console.log('Sending auth data to parent window');
+              const data = {
+                type: 'spotify-auth-success',
+                access_token: '${access_token}',
+                refresh_token: '${refresh_token}',
+                expires_in: ${expires_in}
+              };
+              console.log('Data:', data);
+              window.opener.postMessage(data, 'http://localhost:3000');
+              window.close();
+            </script>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error("Error during token exchange:", error.response?.data || error.message);
+      res.redirect(`http://localhost:3000/auth-error`);
+    }
+  } else {
+    res.redirect(`http://localhost:3000/auth-error`);
+  }
+});
+
+router.post("/refresh-token", async (req, res) => {
+  const { refresh_token } = req.body;
+  const client_id = process.env.SPOTIFY_CLIENT_ID;
+  const client_secret = process.env.SPOTIFY_CLIENT_SECRET;
+
+  if (!refresh_token) {
+    return res.status(400).json({ error: "Refresh token is required" });
+  }
+
+  try {
+    const response = await axios.post("https://accounts.spotify.com/api/token",
+      querystring.stringify({
+        grant_type: "refresh_token",
+        refresh_token: refresh_token
+      }), {
+        headers: {
+          "Authorization": "Basic " + Buffer.from(client_id + ":" + client_secret).toString("base64"),
+          "Content-Type": "application/x-www-form-urlencoded"
+        }
+      }
+    );
+
+    res.json({
+      access_token: response.data.access_token,
+      expires_in: response.data.expires_in
+    });
+  } catch (error) {
+    console.error("Error refreshing token:", error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to refresh token" });
+  }
+});
+
+
+// Testing
+router.get("/me", async (req, res) => {
+  const access_token = req.query.access_token;
+
+  if (!access_token) {
+    return res.status(400).json({ error: "Access token is required" });
+  }
+
+  try {
+    const { data } = await axios.get("https://api.spotify.com/v1/me", {
+      headers: {
+        Authorization: `Bearer ${access_token}`
+      }
+    });
+
+    res.json(data);
+  } catch (error) {
+    console.error("Error fetching user profile:", error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to fetch user profile" });
+  }
 });
 
 export default router;

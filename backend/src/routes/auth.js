@@ -32,6 +32,48 @@ router.get("/login", (req, res) => {
   );
 });
 
+router.post("/refresh", async (req, res) => {
+  const { refresh_token } = req.body;
+  const client_id = process.env.SPOTIFY_CLIENT_ID;
+  const client_secret = process.env.SPOTIFY_CLIENT_SECRET;
+
+  if (!refresh_token) {
+    return res.status(400).json({ error: 'Refresh token is required' });
+  }
+
+  try {
+    const response = await axios.post('https://accounts.spotify.com/api/token',
+      querystring.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: refresh_token
+      }),
+      {
+        headers: {
+          'Authorization': 'Basic ' + Buffer.from(client_id + ':' + client_secret).toString('base64'),
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      }
+    );
+
+    // If we get a new refresh token, send it back
+    const newRefreshToken = response.data.refresh_token;
+
+    res.json({
+      access_token: response.data.access_token,
+      expires_in: response.data.expires_in,
+      ...(newRefreshToken && { refresh_token: newRefreshToken }) // Include new refresh token if provided
+    });
+  } catch (error) {
+    console.error('Error refreshing token:', error.response?.data || error.message);
+    // Send specific error status based on Spotify's response
+    const status = error.response?.status || 500;
+    res.status(status).json({ 
+      error: 'Failed to refresh token',
+      details: error.response?.data?.error || error.message
+    });
+  }
+});
+
 router.get("/callback", async (req, res) => {
   const code = req.query.code || null;
   const redirect_uri = process.env.SPOTIFY_REDIRECT_URI;
@@ -59,36 +101,28 @@ router.get("/callback", async (req, res) => {
 
       const { access_token, refresh_token, expires_in } = response.data;
 
-      // In a production environment, you would store these tokens securely
-      // For now, we'll send them to the frontend
-      const redirectUrl = `http://localhost:3000/auth-callback?${querystring.stringify({
+      // Get user profile
+      const userProfile = await axios.get('https://api.spotify.com/v1/me', {
+        headers: { 'Authorization': `Bearer ${access_token}` }
+      });
+
+      // Store tokens and user info in session
+      req.session.spotifyTokens = {
+        access_token,
+        refresh_token,
+        expires_in,
+        userProfile: userProfile.data
+      };
+
+      // Redirect to frontend with tokens
+      res.redirect(`http://localhost:3000/auth-callback?${querystring.stringify({
         access_token,
         refresh_token,
         expires_in
-      })}`;
-      
-      // Send HTML that will redirect and pass tokens
-      res.send(`
-        <html>
-          <body>
-            <script>
-              console.log('Sending auth data to parent window');
-              const data = {
-                type: 'spotify-auth-success',
-                access_token: '${access_token}',
-                refresh_token: '${refresh_token}',
-                expires_in: ${expires_in}
-              };
-              console.log('Data:', data);
-              window.opener.postMessage(data, 'http://localhost:3000');
-              window.close();
-            </script>
-          </body>
-        </html>
-      `);
+      })}`);
     } catch (error) {
       console.error("Error during token exchange:", error.response?.data || error.message);
-      res.redirect(`http://localhost:3000/auth-error`);
+      res.redirect(`http://localhost:3000?error=${encodeURIComponent('Failed to authenticate with Spotify')}`);
     }
   } else {
     res.redirect(`http://localhost:3000/auth-error`);

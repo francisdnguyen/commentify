@@ -5,6 +5,7 @@ import MongoStore from "connect-mongo";
 import mongoose from "mongoose";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/auth.js";
+import apiRoutes from "./routes/api.js";
 
 // Connect to MongoDB
 connectDB();
@@ -36,6 +37,7 @@ app.use(session({
 
 // Routes
 app.use("/auth", authRoutes);
+app.use("/api", apiRoutes);
 
 // Test route for database connection
 app.get("/api/test-db", async (req, res) => {

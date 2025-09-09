@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import PlaylistCard from '../components/PlaylistCard';
 import CreatePlaylistModal from '../components/CreatePlaylistModal';
+import ThemeToggle from '../components/ThemeToggle';
 import { getUserPlaylists } from '../api';
 import { getValidToken } from '../utils/auth';
 
@@ -86,27 +87,35 @@ function Dashboard() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200">
+        <div className="text-gray-900 dark:text-gray-100 text-xl">Loading...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200">
+      <div className="container mx-auto px-4 py-8">
       {/* Header Section */}
       <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Welcome, {userProfile?.display_name}</h1>
-          <p className="text-gray-600">Here are your playlists</p>
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Welcome, {userProfile?.display_name}</h1>
+            <p className="text-gray-600 dark:text-gray-400">Here are your playlists</p>
+          </div>
         </div>
         <div className="flex gap-4">
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+            className="px-4 py-2 bg-green-500 dark:bg-green-600 text-white rounded-lg hover:bg-green-600 dark:hover:bg-green-700 transition-colors duration-200"
           >
             Create New Playlist
           </button>
           <button
             onClick={handleLogout}
-            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+            className="px-4 py-2 bg-gray-500 dark:bg-gray-600 text-white rounded-lg hover:bg-gray-600 dark:hover:bg-gray-700 transition-colors duration-200"
           >
             Logout
           </button>
@@ -115,7 +124,7 @@ function Dashboard() {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6">
+        <div className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 p-4 rounded-lg mb-6">
           {error}
         </div>
       )}
@@ -133,6 +142,7 @@ function Dashboard() {
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleCreatePlaylist}
       />
+      </div>
     </div>
   );
 }

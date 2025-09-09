@@ -1,5 +1,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import AuthCallback from "./components/AuthCallback";
 import Dashboard from "./pages/Dashboard";
 import HomePage from "./pages/HomePage";
@@ -10,17 +11,19 @@ import PlaylistDetail from "./pages/PlaylistDetail";
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/auth-callback" element={<AuthCallback />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/contact" element={<Contact />} />
-        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-        <Route path="/playlist/:playlistId" element={<PlaylistDetail />} />
-        <Route path="/" element={<HomePage />} />
-      </Routes>
-    </Router>
+    <ThemeProvider>
+      <Router>
+        <Routes>
+          <Route path="/auth-callback" element={<AuthCallback />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/playlist/:playlistId" element={<PlaylistDetail />} />
+          <Route path="/" element={<HomePage />} />
+        </Routes>
+      </Router>
+    </ThemeProvider>
   );
 }
 

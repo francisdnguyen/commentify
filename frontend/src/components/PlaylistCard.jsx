@@ -18,7 +18,7 @@ function PlaylistCard({ playlist }) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 hover:shadow-lg transition-all duration-200 border border-gray-200 dark:border-gray-700">
       <div className="flex items-start space-x-4">
         <img 
           src={playlist.images[0]?.url || '/placeholder-playlist.png'} 
@@ -28,29 +28,29 @@ function PlaylistCard({ playlist }) {
         <div className="flex-1">
           <Link 
             to={`/playlist/${playlist.id}`}
-            className="text-xl font-semibold hover:text-green-600 transition-colors"
+            className="text-xl font-semibold text-gray-900 dark:text-gray-100 hover:text-green-600 dark:hover:text-green-400 transition-colors"
           >
             {playlist.name}
           </Link>
-          <p className="text-gray-600 mt-1">{playlist.tracks.total} tracks</p>
-          <p className="text-gray-500 text-sm mt-2 line-clamp-2">
+          <p className="text-gray-600 dark:text-gray-100 mt-1">{playlist.tracks.total} tracks</p>
+          <p className="text-gray-500 dark:text-gray-100 text-sm mt-2 line-clamp-2">
             {playlist.description || 'No description'}
           </p>
           <div className="flex items-center mt-3 space-x-3">
             <Link
               to={`/playlist/${playlist.id}`}
-              className="px-3 py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"
+              className="px-3 py-1 bg-green-500 dark:bg-green-600 text-white rounded-lg hover:bg-green-600 dark:hover:bg-green-700 text-sm transition-colors duration-200"
             >
               View Details
             </Link>
             <button
               onClick={handleShare}
-              className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
+              className="px-3 py-1 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 text-sm transition-colors duration-200"
             >
               Share
             </button>
             {playlist.hasComments && (
-              <span className="text-gray-500 text-sm">
+              <span className="text-gray-500 dark:text-gray-100 text-sm">
                 Has comments
               </span>
             )}

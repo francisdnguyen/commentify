@@ -1,26 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 
-function HomePage() {
-  const [error, setError] = useState(null);
-  
-  useEffect(() => {
-    // Check for error message in URL
-    const params = new URLSearchParams(window.location.search);
-    const errorMsg = params.get('error');
-    if (errorMsg) {
-      setError(decodeURIComponent(errorMsg));
-    }
-  }, []);
-
-  const handleLogin = () => {
-    // Direct redirect to Spotify login
-    window.location.href = 'http://localhost:5000/auth/login';
-  };
-
+function Contact() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <nav className="py-6 px-12 relative z-10">
-        <div className="flex justify-end space-x-4">
+        <div className="flex justify-end space-x-6">
           <button 
             className="text-xl font-medium px-8 py-4 rounded-full transition-all duration-200 hover:bg-green-500 hover:text-white focus:outline-none"
             onClick={() => window.location.href = '/'}
@@ -48,22 +32,28 @@ function HomePage() {
         </div>
       </nav>
 
-      <main className="flex-grow flex flex-col items-center justify-center -mt-72">
-        <h1 className="text-6xl font-bold mb-4 text-gray-800">Commentify</h1>
-        <h2 className="text-2xl mb-16">Turn Playlists Into Conversations</h2>
-
-        {error && (
-          <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-8">
-            {error}
+      <main className="flex-grow container mx-auto px-6 py-12 max-w-2xl">
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold mb-8 text-gray-800">Contact Me</h1>
+          
+          <div className="p-4 bg-gray-50 rounded-lg">
+            <p className="text-2xl text-gray-700">
+              For general inquiries and support, you can contact me at{' '}
+              <a href="mailto:francisnguyen5121@gmail.com" className="text-green-600 hover:text-green-700 font-medium">
+                francisnguyen5121@gmail.com
+              </a>
+              {' '}or{' '}
+              <a 
+                href="https://www.instagram.com/fran.swaaaa/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-green-600 hover:text-green-700 font-medium"
+              >
+                DM me on Instagram!
+              </a>
+            </p>
           </div>
-        )}
-
-        <button
-          onClick={handleLogin}
-          className="bg-[#1DB954] text-white py-6 px-16 rounded-xl hover:bg-[#1ed760] transition-colors text-2xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105"
-        >
-          Log in with Spotify
-        </button>
+        </div>
       </main>
 
       <footer className="py-4 px-6">
@@ -84,4 +74,4 @@ function HomePage() {
   );
 }
 
-export default HomePage;
+export default Contact;

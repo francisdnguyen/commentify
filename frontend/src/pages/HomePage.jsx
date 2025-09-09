@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 function HomePage() {
-  const navigate = useNavigate();
   const [error, setError] = useState(null);
   
   useEffect(() => {
@@ -20,28 +18,48 @@ function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">Commentify</h1>
-          <p className="text-gray-600 mb-8">
-            Create and share playlists with comments on each song.
-          </p>
+    <div className="min-h-screen flex flex-col bg-white">
+      <nav className="py-4 px-6">
+        <ul className="flex justify-end space-x-8">
+          <li><a href="/" className="hover:underline">Home</a></li>
+          <li><a href="/about" className="hover:underline">About</a></li>
+          <li><a href="/privacy-policy" className="hover:underline">Privacy Policy</a></li>
+          <li><a href="/contact" className="hover:underline">Contact</a></li>
+        </ul>
+      </nav>
 
-          {error && (
-            <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
+      <main className="flex-grow flex flex-col items-center justify-center -mt-16">
+        <h1 className="text-6xl font-bold mb-3">Commentify</h1>
+        <h2 className="text-2xl mb-12">Turn Playlists Into Conversations</h2>
 
-          <button
-            onClick={handleLogin}
-            className="w-full bg-green-500 text-white py-3 px-4 rounded-lg hover:bg-green-600 transition-colors"
-          >
-            Login with Spotify
-          </button>
+        {error && (
+          <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
+
+        <button
+          onClick={handleLogin}
+          className="bg-[#1DB954] text-white py-2 px-8 rounded hover:bg-[#1ed760] transition-colors text-lg"
+        >
+          Log in with Spotify
+        </button>
+      </main>
+
+      <footer className="py-4 px-6">
+        <div className="flex justify-between items-center max-w-6xl mx-auto">
+          <span>Made by Francis Nguyen</span>
+          <div className="flex items-center space-x-2">
+            <a href="/" className="hover:underline">Home</a>
+            <span>|</span>
+            <a href="/about" className="hover:underline">About</a>
+            <span>|</span>
+            <a href="/privacy-policy" className="hover:underline">Privacy Policy</a>
+            <span>|</span>
+            <a href="/contact" className="hover:underline">Contact</a>
+          </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

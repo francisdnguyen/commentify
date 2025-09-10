@@ -3,6 +3,14 @@ import { Link } from 'react-router-dom';
 import { generateShareableLink } from '../api';
 
 function PlaylistCard({ playlist }) {
+  // Function to decode HTML entities
+  const decodeHtmlEntities = (text) => {
+    if (!text) return text;
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
+  };
+
   const handleShare = async () => {
     try {
       const response = await generateShareableLink(playlist.id);
@@ -34,7 +42,7 @@ function PlaylistCard({ playlist }) {
           </Link>
           <p className="text-gray-600 dark:text-gray-100 mt-1">{playlist.tracks.total} tracks</p>
           <p className="text-gray-500 dark:text-gray-100 text-sm mt-2 line-clamp-2">
-            {playlist.description || 'No description'}
+            {decodeHtmlEntities(playlist.description) || ''}
           </p>
           <div className="flex items-center mt-3 space-x-3">
             <Link

@@ -193,3 +193,26 @@ export const generateShareableLink = async (req, res) => {
           });
         }
       };
+
+export const getUserProfile = async (req, res) => {
+  try {
+    const accessToken = req.accessToken;
+    if (!accessToken) {
+      return res.status(401).json({ error: 'No access token provided' });
+    }
+
+    // Fetch user profile from Spotify API
+    const response = await axios.get('https://api.spotify.com/v1/me', {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    if (error.response?.status === 401) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+    } else {
+      res.status(500).json({ error: 'Failed to fetch user profile' });
+    }
+  }
+};

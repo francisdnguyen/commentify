@@ -3,7 +3,8 @@ import {
   getUserPlaylists,
   getPlaylistDetails,
   generateShareableLink,
-  createPlaylist
+  createPlaylist,
+  getUserProfile
 } from '../controllers/playlistController.js';
 import {
   addComment,
@@ -14,6 +15,9 @@ import {
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// User routes
+router.get('/user/profile', authenticateToken, getUserProfile);
 
 // Playlist routes
 router.get('/playlists', authenticateToken, getUserPlaylists);

@@ -24,6 +24,10 @@ export const getUserPlaylists = () => {
   return api.get('/api/playlists');
 };
 
+export const getUserProfile = () => {
+  return api.get('/api/user/profile');
+};
+
 export const getPlaylistDetails = (playlistId) => {
   return api.get(`/api/playlists/${playlistId}`);
 };

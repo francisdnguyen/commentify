@@ -48,17 +48,29 @@ export const getPlaylistDetails = async (req, res) => {
     console.log('Making Spotify API request for playlist:', playlistId);
     console.log('Using access token:', accessToken.substring(0, 10) + '...');
     
-    // Fetch both playlist details and tracks in parallel
-    let playlistResponse, tracksResponse;
+    // Fetch playlist details first
+    let playlistResponse, allTracks = [];
+    
     try {
-      [playlistResponse, tracksResponse] = await Promise.all([
-        axios.get(`https://api.spotify.com/v1/playlists/${playlistId}`, {
+      playlistResponse = await axios.get(`https://api.spotify.com/v1/playlists/${playlistId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+
+      // Fetch all tracks with pagination
+      let nextUrl = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50`;
+      
+      while (nextUrl) {
+        const tracksResponse = await axios.get(nextUrl, {
           headers: { Authorization: `Bearer ${accessToken}` }
-        }),
-        axios.get(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        })
-      ]);
+        });
+        
+        allTracks = allTracks.concat(tracksResponse.data.items);
+        nextUrl = tracksResponse.data.next; // Spotify provides the next URL or null if no more pages
+        
+        console.log(`Fetched ${tracksResponse.data.items.length} tracks, total so far: ${allTracks.length}`);
+      }
+      
+      console.log(`Successfully fetched all ${allTracks.length} tracks from playlist`);
     } catch (error) {
       console.error('Error from Spotify API:', error.response?.status, error.response?.data);
       if (error.response?.status === 404) {
@@ -96,7 +108,8 @@ export const getPlaylistDetails = async (req, res) => {
       ...playlistResponse.data,
       tracks: {
         ...playlistResponse.data.tracks,
-        items: tracksResponse.data.items
+        items: allTracks,
+        total: allTracks.length // Update total to reflect actual number of tracks fetched
       },
       comments: comments || [],
       _id: playlist._id

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { getPlaylistDetails, getUserProfile } from '../api';
 import CommentSection from '../components/CommentSection';
 import ThemeToggle from '../components/ThemeToggle';
@@ -7,6 +7,7 @@ import SongCommentModal from '../components/SongCommentModal';
 
 function PlaylistDetail() {
   const { playlistId } = useParams();
+  const navigate = useNavigate();
   const [playlist, setPlaylist] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -16,6 +17,10 @@ function PlaylistDetail() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
   const [songComments, setSongComments] = useState({});
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const songsPerPage = 50;
 
   // Function to decode HTML entities
   const decodeHtmlEntities = (text) => {
@@ -87,6 +92,31 @@ function PlaylistDetail() {
     }));
   };
 
+  // Pagination logic
+  const totalSongs = playlist?.tracks?.items?.length || 0;
+  const totalPages = Math.ceil(totalSongs / songsPerPage);
+  const startIndex = (currentPage - 1) * songsPerPage;
+  const endIndex = startIndex + songsPerPage;
+  const currentSongs = playlist?.tracks?.items?.slice(startIndex, endIndex) || [];
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const goToPage = (pageNumber) => {
+    if (pageNumber >= 1 && pageNumber <= totalPages) {
+      setCurrentPage(pageNumber);
+    }
+  };
+
   if (loading) return (
     <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200 flex items-center justify-center">
       <div className="text-gray-900 dark:text-gray-100 text-xl">Loading playlist...</div>
@@ -106,8 +136,17 @@ function PlaylistDetail() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200">
       <div className="max-w-4xl mx-auto p-6">
-        {/* Theme Toggle */}
-        <div className="flex justify-start mb-6">
+        {/* Header with Back Button and Theme Toggle */}
+        <div className="flex justify-between items-center mb-6">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white transition-colors duration-200"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
           <ThemeToggle />
         </div>
         
@@ -140,15 +179,23 @@ function PlaylistDetail() {
 
         {/* Tracks List */}
         <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Tracks</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Tracks</h2>
+            {totalSongs > songsPerPage && (
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Showing {startIndex + 1}-{Math.min(endIndex, totalSongs)} of {totalSongs} tracks
+              </div>
+            )}
+          </div>
+          
           <div className="space-y-2">
-            {playlist.tracks?.items?.map((item, index) => (
+            {currentSongs.map((item, index) => (
               <div
                 key={item.track.id}
                 onClick={() => openSongModal(item.track)}
                 className="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200 group cursor-pointer"
               >
-                <span className="w-8 text-gray-400 dark:text-gray-500">{index + 1}</span>
+                <span className="w-8 text-gray-400 dark:text-gray-500">{startIndex + index + 1}</span>
                 <div className="flex-1">
                   <p className="font-medium text-gray-900 dark:text-gray-100">{item?.track?.name || 'Unknown Track'}</p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -182,6 +229,68 @@ function PlaylistDetail() {
               </div>
             ))}
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200 dark:border-gray-600">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 1}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Previous
+                </button>
+                
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNumber;
+                    if (totalPages <= 5) {
+                      pageNumber = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNumber = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNumber = totalPages - 4 + i;
+                    } else {
+                      pageNumber = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <button
+                        key={pageNumber}
+                        onClick={() => goToPage(pageNumber)}
+                        className={`px-3 py-2 text-sm font-medium rounded-lg ${
+                          currentPage === pageNumber
+                            ? 'text-blue-600 bg-blue-50 border border-blue-300 dark:bg-gray-700 dark:text-blue-400 dark:border-blue-600'
+                            : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white'
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                  <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                Page {currentPage} of {totalPages}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Comments Section */}

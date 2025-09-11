@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getPlaylistDetails, getUserProfile } from '../api';
+import { getPlaylistDetails, getUserProfile, getAllSongCommentsForPlaylist, addSongComment as apiAddSongComment } from '../api';
 import CommentSection from '../components/CommentSection';
 import ThemeToggle from '../components/ThemeToggle';
 import SongCommentModal from '../components/SongCommentModal';
+import { useCache } from '../contexts/CacheContext';
 
 function PlaylistDetail() {
   const { playlistId } = useParams();
   const navigate = useNavigate();
+  const cache = useCache();
   const [playlist, setPlaylist] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,18 +37,65 @@ function PlaylistDetail() {
       try {
         setLoading(true);
         
-        // Fetch playlist details
-        const playlistResponse = await getPlaylistDetails(playlistId);
-        setPlaylist(playlistResponse.data);
-        
-        // Fetch user profile separately with its own error handling
-        try {
-          const userResponse = await getUserProfile();
-          setUser(userResponse.data);
-        } catch (userErr) {
-          console.error('Error fetching user profile:', userErr);
-          // Don't fail the whole component if user profile fails
+        // Check cache first
+        const cachedPlaylist = cache.getCachedPlaylistDetails(playlistId);
+        const cachedUser = cache.getCachedUserProfile();
+
+        if (cachedPlaylist && cachedUser) {
+          console.log('Loading playlist from cache...');
+          setPlaylist(cachedPlaylist);
+          setUser(cachedUser);
+        } else {
+          console.log('Cache miss, fetching fresh playlist data...');
+          
+          // Fetch playlist details
+          const playlistResponse = await getPlaylistDetails(playlistId);
+          const playlistData = playlistResponse.data;
+          setPlaylist(playlistData);
+          
+          // Cache the playlist data
+          cache.setPlaylistDetails(playlistId, playlistData);
+          
+          // Fetch user profile separately with its own error handling
+          try {
+            let userData = cachedUser;
+            if (!userData) {
+              const userResponse = await getUserProfile();
+              userData = userResponse.data;
+              cache.setUserProfile(userData);
+            }
+            setUser(userData);
+          } catch (userErr) {
+            console.error('Error fetching user profile:', userErr);
+            // Don't fail the whole component if user profile fails
+          }
         }
+
+        // Always fetch song comments fresh (don't cache these)
+        try {
+          const songCommentsResponse = await getAllSongCommentsForPlaylist(playlistId);
+          const rawComments = songCommentsResponse.data;
+          
+          // Transform backend format to frontend format
+          const transformedComments = {};
+          Object.keys(rawComments).forEach(trackId => {
+            transformedComments[trackId] = rawComments[trackId].map(comment => ({
+              id: comment._id,
+              text: comment.content,
+              author: comment.user?.displayName || 'Anonymous',
+              timestamp: comment.createdAt,
+              songId: trackId
+            }));
+          });
+          
+          setSongComments(transformedComments);
+        } catch (songCommentsErr) {
+          console.error('Error fetching song comments:', songCommentsErr);
+          // Don't fail if song comments can't be loaded
+          setSongComments({});
+        }
+
+        // Loading will be set to false in the finally block
         
       } catch (err) {
         console.error('Error fetching playlist data:', err.response?.data || err.message);
@@ -63,7 +112,7 @@ function PlaylistDetail() {
     };
 
     fetchData();
-  }, [playlistId]);
+  }, [playlistId, cache]);
 
   // Modal functions
   const openSongModal = (song) => {
@@ -77,19 +126,38 @@ function PlaylistDetail() {
   };
 
   const addSongComment = async (songId, commentText) => {
-    // For now, we'll store comments locally. In a real app, this would be an API call
-    const newComment = {
-      id: Date.now(),
-      text: commentText,
-      author: user?.display_name || 'Unknown User', // Use actual Spotify username
-      timestamp: new Date().toISOString(),
-      songId: songId
-    };
+    try {
+      // Save comment to backend
+      const response = await apiAddSongComment(playlistId, songId, commentText);
+      const newComment = response.data;
 
-    setSongComments(prev => ({
-      ...prev,
-      [songId]: [...(prev[songId] || []), newComment]
-    }));
+      // Update local state to show the comment immediately
+      setSongComments(prev => ({
+        ...prev,
+        [songId]: [...(prev[songId] || []), {
+          id: newComment._id,
+          text: newComment.content,
+          author: newComment.user.displayName,
+          timestamp: newComment.createdAt,
+          songId: songId
+        }]
+      }));
+    } catch (error) {
+      console.error('Error adding song comment:', error);
+      // Fallback to local storage if backend fails
+      const newComment = {
+        id: Date.now(),
+        text: commentText,
+        author: user?.display_name || 'Unknown User',
+        timestamp: new Date().toISOString(),
+        songId: songId
+      };
+
+      setSongComments(prev => ({
+        ...prev,
+        [songId]: [...(prev[songId] || []), newComment]
+      }));
+    }
   };
 
   // Pagination logic
@@ -136,8 +204,9 @@ function PlaylistDetail() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200">
       <div className="max-w-4xl mx-auto p-6">
-        {/* Header with Back Button and Theme Toggle */}
+        {/* Header with Theme Toggle and Back Button */}
         <div className="flex justify-between items-center mb-6">
+          <ThemeToggle />
           <button
             onClick={() => navigate('/dashboard')}
             className="flex items-center px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white transition-colors duration-200"
@@ -147,7 +216,6 @@ function PlaylistDetail() {
             </svg>
             Back
           </button>
-          <ThemeToggle />
         </div>
         
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 transition-colors duration-200">
@@ -195,7 +263,7 @@ function PlaylistDetail() {
                 onClick={() => openSongModal(item.track)}
                 className="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200 group cursor-pointer"
               >
-                <span className="w-8 text-gray-400 dark:text-gray-500">{startIndex + index + 1}</span>
+                <span className="w-12 text-right mr-4 text-gray-400 dark:text-gray-500">{startIndex + index + 1}</span>
                 <div className="flex-1">
                   <p className="font-medium text-gray-900 dark:text-gray-100">{item?.track?.name || 'Unknown Track'}</p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -213,7 +281,7 @@ function PlaylistDetail() {
                       e.stopPropagation(); // Prevent row click when clicking the button
                       openSongModal(item.track);
                     }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-gray-600 rounded-full relative"
+                    className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-gray-600 rounded-full relative"
                     title="View comments"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

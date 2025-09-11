@@ -8,7 +8,7 @@ const commentSchema = new mongoose.Schema({
   },
   trackId: {
     type: String,
-    required: true
+    default: null // null for playlist comments, string for song comments
   },
   user: {
     type: mongoose.Schema.Types.ObjectId,

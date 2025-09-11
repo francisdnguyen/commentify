@@ -10,7 +10,10 @@ import {
   addComment,
   getComments,
   deleteComment,
-  editComment
+  editComment,
+  addSongComment,
+  getSongComments,
+  getAllSongCommentsForPlaylist
 } from '../controllers/commentController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -30,5 +33,10 @@ router.get('/playlists/:playlistId/comments', authenticateToken, getComments);
 router.post('/playlists/:playlistId/comments', authenticateToken, addComment);
 router.put('/comments/:commentId', authenticateToken, editComment);
 router.delete('/comments/:commentId', authenticateToken, deleteComment);
+
+// Song comment routes
+router.get('/playlists/:playlistId/songs/:trackId/comments', authenticateToken, getSongComments);
+router.post('/playlists/:playlistId/songs/:trackId/comments', authenticateToken, addSongComment);
+router.get('/playlists/:playlistId/song-comments', authenticateToken, getAllSongCommentsForPlaylist);
 
 export default router;

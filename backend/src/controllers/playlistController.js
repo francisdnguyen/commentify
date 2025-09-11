@@ -1,4 +1,5 @@
 import axios from 'axios';
+import mongoose from 'mongoose';
 import Playlist from '../models/Playlist.js';
 import User from '../models/User.js';
 import Comment from '../models/Comment.js';
@@ -13,14 +14,61 @@ export const getUserPlaylists = async (req, res) => {
     const response = await axios.get('https://api.spotify.com/v1/me/playlists', {
       headers: { 'Authorization': `Bearer ${accessToken}` }
     });
-    // Get playlists that have been commented on from our database
-    const commentedPlaylists = await Playlist.find({
-      spotifyId: { $in: response.data.items.map(item => item.id) }
-    }).lean();
-    // Add a flag to indicate if the playlist has comments
+    // Get playlists that actually have comments from our database
+    console.log('Looking for playlists from Spotify IDs:', response.data.items.map(item => item.id));
+    
+    // Check what collections exist
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    console.log('Available collections:', collections.map(c => c.name));
+    
+    // First, let's see what playlists exist in our database
+    const allPlaylistsInDB = await Playlist.find({ 
+      spotifyId: { $in: response.data.items.map(item => item.id) } 
+    }).select('spotifyId _id');
+    console.log('Playlists found in our database:', allPlaylistsInDB);
+    
+    // Check all comments in the database for these playlists
+    const allComments = await Comment.find({
+      playlist: { $in: allPlaylistsInDB.map(p => p._id) }
+    }).select('playlist trackId content');
+    console.log('All comments for these playlists:', allComments);
+    
+    const playlistsWithComments = await Playlist.aggregate([
+      {
+        $match: {
+          spotifyId: { $in: response.data.items.map(item => item.id) }
+        }
+      },
+      {
+        $lookup: {
+          from: 'comments',
+          localField: '_id',
+          foreignField: 'playlist',
+          as: 'comments'
+        }
+      },
+      {
+        $match: {
+          'comments.0': { $exists: true } // Only playlists that have at least one comment
+        }
+      },
+      {
+        $project: {
+          spotifyId: 1,
+          commentCount: { $size: '$comments' }
+        }
+      }
+    ]);
+    
+    console.log('Playlists with comments:', playlistsWithComments.map(p => ({ 
+      spotifyId: p.spotifyId, 
+      commentCount: p.commentCount 
+    })));
+    
+    // Add a flag to indicate if the playlist actually has comments
     const playlists = response.data.items.map(playlist => ({
       ...playlist,
-      hasComments: commentedPlaylists.some(cp => cp.spotifyId === playlist.id)
+      hasComments: playlistsWithComments.some(cp => cp.spotifyId === playlist.id)
     }));
     res.json(playlists);
   } catch (error) {

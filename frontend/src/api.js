@@ -56,3 +56,16 @@ export const editComment = (commentId, content) => {
 export const deleteComment = (commentId) => {
   return api.delete(`/api/comments/${commentId}`);
 };
+
+// Song comment API calls
+export const addSongComment = (playlistId, trackId, content) => {
+  return api.post(`/api/playlists/${playlistId}/songs/${trackId}/comments`, { content });
+};
+
+export const getSongComments = (playlistId, trackId) => {
+  return api.get(`/api/playlists/${playlistId}/songs/${trackId}/comments`);
+};
+
+export const getAllSongCommentsForPlaylist = (playlistId) => {
+  return api.get(`/api/playlists/${playlistId}/song-comments`);
+};

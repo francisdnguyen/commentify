@@ -27,9 +27,11 @@ export const getValidToken = async () => {
       return access_token;
     } catch (error) {
       console.error('Token refresh failed:', error);
-      // Only clear storage if the refresh token is invalid
+      // Only clear auth-related storage if the refresh token is invalid
       if (error.response?.status === 401) {
-        localStorage.clear();
+        localStorage.removeItem('spotify_access_token');
+        localStorage.removeItem('spotify_refresh_token');
+        localStorage.removeItem('spotify_token_expiry');
         window.location.href = '/'; // Force a full page reload to restart auth flow
       }
       throw new Error('Failed to refresh token');

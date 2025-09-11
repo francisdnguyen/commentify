@@ -15,20 +15,35 @@ const ShareModal = ({ isOpen, onClose, playlistId, playlistName }) => {
   // Fetch existing share link when modal opens
   const fetchShareLink = useCallback(async () => {
     try {
+      console.log('🔍 ShareModal: Fetching share link for playlist:', playlistId);
       setLoading(true);
       setError(null);
       const response = await getShareLink(playlistId);
+      console.log('✅ ShareModal: Share link fetched successfully:', response.data);
+      console.log('🔍 ShareModal: Data structure:', JSON.stringify(response.data, null, 2));
       setShareData(response.data);
       
       // Update form state with existing settings
-      setAllowComments(response.data.permissions.allowComments);
-      setRequireAuth(response.data.permissions.requireAuth);
+      if (response.data?.permissions) {
+        setAllowComments(response.data.permissions.allowComments);
+        setRequireAuth(response.data.permissions.requireAuth);
+      } else {
+        console.log('⚠️ ShareModal: No permissions object found in response');
+      }
     } catch (err) {
+      console.error('❌ ShareModal: Error fetching share link:', err);
+      console.error('❌ ShareModal: Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        playlistId: playlistId
+      });
       if (err.response?.status === 404) {
+        console.log('📝 ShareModal: No existing share link found (404) - this is normal for new shares');
         // No existing share link
         setShareData(null);
       } else {
-        setError('Failed to fetch share link');
+        setError('Failed to fetch share link: ' + (err.response?.data?.message || err.message));
       }
     } finally {
       setLoading(false);
@@ -37,12 +52,19 @@ const ShareModal = ({ isOpen, onClose, playlistId, playlistName }) => {
 
   useEffect(() => {
     if (isOpen && playlistId) {
+      console.log('🚀 ShareModal: Modal opened, fetching share link...');
       fetchShareLink();
     }
   }, [isOpen, playlistId, fetchShareLink]);
 
   const handleCreateShare = async () => {
     try {
+      console.log('🎯 ShareModal: Creating new share link with options:', {
+        playlistId,
+        allowComments,
+        requireAuth,
+        expiresIn
+      });
       setLoading(true);
       setError(null);
       
@@ -53,10 +75,17 @@ const ShareModal = ({ isOpen, onClose, playlistId, playlistName }) => {
       };
       
       const response = await createShareLink(playlistId, options);
+      console.log('✅ ShareModal: Share link created successfully:', response.data);
       setShareData(response.data);
     } catch (err) {
-      setError('Failed to create share link');
-      console.error('Error creating share link:', err);
+      console.error('❌ ShareModal: Error creating share link:', err);
+      console.error('❌ ShareModal: Create error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        playlistId: playlistId
+      });
+      setError('Failed to create share link: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
@@ -121,6 +150,8 @@ const ShareModal = ({ isOpen, onClose, playlistId, playlistName }) => {
   };
 
   if (!isOpen) return null;
+
+  console.log('🎨 ShareModal: Rendering modal for playlist:', playlistId);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -257,13 +288,16 @@ const ShareModal = ({ isOpen, onClose, playlistId, playlistName }) => {
                 </button>
               </>
             ) : (
-              <button
-                onClick={handleCreateShare}
-                disabled={loading}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? 'Creating...' : 'Create Share Link'}
-              </button>
+              <>
+                {console.log('🔘 ShareModal: Rendering CREATE button - shareData is null')}
+                <button
+                  onClick={handleCreateShare}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {loading ? 'Creating...' : 'Create Share Link'}
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getSharedPlaylist, getSharedPlaylistComments, addCommentToShared } from '../api';
+import { getSharedPlaylist, addSongCommentToShared } from '../api';
 import ThemeToggle from '../components/ThemeToggle';
 import SongCommentModal from '../components/SongCommentModal';
 
 function SharedPlaylistView() {
   const { shareToken } = useParams();
   const navigate = useNavigate();
+  
+  console.log('🔗 SharedPlaylistView: Received shareToken from URL:', shareToken);
+  console.log('🔗 SharedPlaylistView: ShareToken length:', shareToken?.length);
   
   const [playlist, setPlaylist] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,17 +40,13 @@ function SharedPlaylistView() {
       try {
         setLoading(true);
         
-        // Load playlist data
-        const playlistData = await getSharedPlaylist(shareToken);
-        console.log('Shared playlist data:', playlistData);
+        // Load playlist data (includes song comments)
+        const response = await getSharedPlaylist(shareToken);
+        console.log('Shared playlist data:', response.data);
         
-        // Load all song comments
-        const commentsData = await getSharedPlaylistComments(shareToken);
-        console.log('Comments data:', commentsData);
-        
-        // Update state with fetched data
-        setPlaylist(playlistData);
-        setSongComments(commentsData);
+        // Update state with fetched data - extract playlist and song comments from response
+        setPlaylist(response.data.playlist);
+        setSongComments(response.data.songComments || {}); // Use song comments from the main response
         setError(null);
       } catch (err) {
         console.error('Error loading shared playlist:', err);
@@ -85,12 +84,19 @@ function SharedPlaylistView() {
     }
 
     try {
-      const newComment = await addCommentToShared(shareToken, songId, comment, anonymousName.trim());
+      const response = await addSongCommentToShared(shareToken, songId, comment, anonymousName.trim());
+      const newComment = response.data;
       
-      // Update local state
+      // Update local state with proper comment format
       setSongComments(prev => ({
         ...prev,
-        [songId]: [...(prev[songId] || []), newComment]
+        [songId]: [...(prev[songId] || []), {
+          id: newComment._id,
+          text: newComment.content,
+          author: newComment.user?.displayName || newComment.anonymousName || 'Anonymous',
+          timestamp: newComment.createdAt,
+          songId: songId
+        }]
       }));
       
       console.log('Comment added successfully');
@@ -256,35 +262,41 @@ function SharedPlaylistView() {
                       <img
                         src={track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '/placeholder-album.png'}
                         alt={track.album?.name || 'Album'}
-                        className="w-12 h-12 object-cover rounded"
+                        className="w-12 h-12 object-cover rounded-md"
                       />
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                          {track.name}
-                        </h3>
+                        <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {track.name || 'Unknown Track'}
+                        </p>
                         <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                          {track.artists?.map(artist => artist.name).join(', ')} • {track.album?.name}
+                          {track.artists?.map(artist => artist.name).join(', ') || 'Unknown Artist'}
                         </p>
                       </div>
-                      <div className="flex items-center space-x-2">
+                    </div>
+                    
+                    <div className="flex items-center space-x-3">
+                      <span className="text-sm text-gray-500 dark:text-gray-400 tabular-nums">
+                        {track.duration_ms ? 
+                          `${Math.floor(track.duration_ms / 60000)}:${String(Math.floor((track.duration_ms % 60000) / 1000)).padStart(2, '0')}` 
+                          : '--:--'}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openSongModal(track);
+                        }}
+                        className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-gray-600 rounded-full relative transition-colors duration-200"
+                        title="View comments"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
                         {commentCount > 0 && (
-                          <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 text-xs font-medium px-2 py-1 rounded-full">
-                            {commentCount} comment{commentCount !== 1 ? 's' : ''}
+                          <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                            {commentCount}
                           </span>
                         )}
-                        <button
-                          className="opacity-0 group-hover:opacity-100 flex items-center px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-all duration-200"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openSongModal(track);
-                          }}
-                        >
-                          💬 Comment
-                        </button>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 ml-4">
-                      {Math.floor(track.duration_ms / 60000)}:{(Math.floor(track.duration_ms / 1000) % 60).toString().padStart(2, '0')}
+                      </button>
                     </div>
                   </div>
                 );

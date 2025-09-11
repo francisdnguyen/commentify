@@ -152,7 +152,7 @@ function PlaylistDetail() {
         [songId]: [...(prev[songId] || []), {
           id: newComment._id,
           text: newComment.content,
-          author: newComment.user.displayName,
+          author: newComment.user?.displayName || 'Anonymous',
           timestamp: newComment.createdAt,
           songId: songId
         }]
@@ -293,45 +293,65 @@ function PlaylistDetail() {
           </div>
           
           <div className="space-y-2">
-            {currentSongs.map((item, index) => (
-              <div
-                key={item.track.id}
-                onClick={() => openSongModal(item.track)}
-                className="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200 group cursor-pointer"
-              >
-                <span className="w-12 text-right mr-4 text-gray-400 dark:text-gray-500">{startIndex + index + 1}</span>
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900 dark:text-gray-100">{item?.track?.name || 'Unknown Track'}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {item?.track?.artists?.map(artist => artist.name).join(', ') || 'Unknown Artist'}
-                  </p>
+            {currentSongs.map((item, index) => {
+              if (!item?.track) return null;
+              
+              const track = item.track;
+              const globalIndex = startIndex + index + 1;
+              const commentCount = songComments[track.id]?.length || 0;
+              
+              return (
+                <div
+                  key={track.id || index}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 group cursor-pointer"
+                  onClick={() => openSongModal(track)}
+                >
+                  <div className="flex items-center space-x-4 flex-1">
+                    <span className="text-sm text-gray-500 dark:text-gray-400 w-8 text-center">
+                      {globalIndex}
+                    </span>
+                    <img
+                      src={track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '/placeholder-album.png'}
+                      alt={track.album?.name || 'Album'}
+                      className="w-12 h-12 object-cover rounded-md"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {track.name || 'Unknown Track'}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                        {track.artists?.map(artist => artist.name).join(', ') || 'Unknown Artist'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <span className="text-sm text-gray-500 dark:text-gray-400 tabular-nums">
+                      {track.duration_ms ? 
+                        `${Math.floor(track.duration_ms / 60000)}:${String(Math.floor((track.duration_ms % 60000) / 1000)).padStart(2, '0')}` 
+                        : '--:--'}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openSongModal(track);
+                      }}
+                      className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-gray-600 rounded-full relative transition-colors duration-200"
+                      title="View comments"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      {commentCount > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                          {commentCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-3">
-                  <span className="text-gray-400 dark:text-gray-500 text-sm">
-                    {item?.track?.duration_ms ? 
-                      `${Math.floor(item.track.duration_ms / 60000)}:${String(Math.floor((item.track.duration_ms % 60000) / 1000)).padStart(2, '0')}` 
-                      : '--:--'}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent row click when clicking the button
-                      openSongModal(item.track);
-                    }}
-                    className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-gray-600 rounded-full relative"
-                    title="View comments"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    {songComments[item.track.id]?.length > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                        {songComments[item.track.id].length}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Pagination Controls */}

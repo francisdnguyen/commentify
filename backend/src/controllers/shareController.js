@@ -10,12 +10,29 @@ export const createShareLink = async (req, res) => {
   try {
     const { playlistId } = req.params;
     const { allowComments = true, requireAuth = false, expiresIn = null } = req.body;
+    console.log('🎯 Backend: Creating share link for playlist:', playlistId, 'by user:', req.user?._id);
+    
+    // Determine if playlistId is a MongoDB ObjectId or Spotify ID
+    const isMongoId = /^[0-9a-fA-F]{24}$/.test(playlistId);
+    console.log('🔍 Backend: Is MongoDB ObjectId?', isMongoId, 'for playlistId:', playlistId);
+    
+    let query;
+    if (isMongoId) {
+      query = { _id: playlistId, owner: req.user._id };
+    } else {
+      query = { spotifyId: playlistId, owner: req.user._id };
+    }
     
     // Verify playlist exists and user owns it
-    const playlist = await Playlist.findOne({ spotifyId: playlistId, owner: req.user._id });
+    const playlist = await Playlist.findOne(query);
     if (!playlist) {
+      console.log('❌ Backend: Playlist not found. Checking user playlists...');
+      const userPlaylists = await Playlist.find({ owner: req.user._id });
+      console.log('🔍 Backend: User has these playlists:', userPlaylists.map(p => ({ id: p._id, spotifyId: p.spotifyId, name: p.name })));
       return res.status(404).json({ error: 'Playlist not found or access denied' });
     }
+    
+    console.log('✅ Backend: Found playlist:', playlist.name);
 
     // Check if a share already exists
     let existingShare = await Share.findOne({ 
@@ -41,7 +58,7 @@ export const createShareLink = async (req, res) => {
       
       return res.json({
         shareToken: existingShare.shareToken,
-        shareUrl: `${req.protocol}://${req.get('host')}/shared/${existingShare.shareToken}`,
+        shareUrl: `http://localhost:3000/shared/${existingShare.shareToken}`,
         permissions: existingShare.permissions,
         expiresAt: existingShare.expiresAt,
         accessCount: existingShare.accessCount
@@ -84,7 +101,7 @@ export const createShareLink = async (req, res) => {
 
     res.json({
       shareToken,
-      shareUrl: `${req.protocol}://${req.get('host')}/shared/${shareToken}`,
+      shareUrl: `http://localhost:3000/shared/${shareToken}`,
       permissions: {
         allowComments,
         requireAuth
@@ -104,8 +121,17 @@ export const getShareLink = async (req, res) => {
   try {
     const { playlistId } = req.params;
     
+    // Determine if playlistId is a MongoDB ObjectId or Spotify ID
+    const isMongoId = /^[0-9a-fA-F]{24}$/.test(playlistId);
+    let query;
+    if (isMongoId) {
+      query = { _id: playlistId, owner: req.user._id };
+    } else {
+      query = { spotifyId: playlistId, owner: req.user._id };
+    }
+    
     // Verify playlist exists and user owns it
-    const playlist = await Playlist.findOne({ spotifyId: playlistId, owner: req.user._id });
+    const playlist = await Playlist.findOne(query);
     if (!playlist) {
       return res.status(404).json({ error: 'Playlist not found or access denied' });
     }
@@ -252,37 +278,82 @@ export const getSharedPlaylist = async (req, res) => {
     // For shared playlists, we need to fetch from Spotify without user authentication
     // We'll use the playlist owner's token for this
     const owner = await User.findById(share.playlist.owner);
-    if (!owner || !owner.spotifyAccessToken) {
-      return res.status(503).json({ error: 'Unable to access playlist data' });
+    console.log('👤 Backend: Owner found:', !!owner);
+    console.log('🔍 Backend: Owner spotify fields:', owner ? Object.keys(owner.toObject()).filter(k => k.includes('spotify') || k.includes('access') || k.includes('token')) : 'no owner');
+    console.log('🔍 Backend: Playlist spotify fields:', share.playlist ? Object.keys(share.playlist.toObject()).filter(k => k.includes('spotify') || k.includes('Id')) : 'no playlist');
+    
+    if (!owner) {
+      return res.status(503).json({ error: 'Unable to access playlist data - owner not found' });
     }
+    
+    // Check different possible token field names
+    const accessToken = owner.spotifyAccessToken || owner.spotify?.accessToken || owner.accessToken;
+    if (!accessToken) {
+      console.log('❌ Backend: No access token found in any field');
+      return res.status(503).json({ error: 'Unable to access playlist data - no token' });
+    }
+    
+    // Check different possible spotify ID field names  
+    const spotifyId = share.playlist.spotifyId || share.playlist.spotifyPlaylistId;
+    if (!spotifyId) {
+      console.log('❌ Backend: No Spotify ID found in any field');
+      return res.status(503).json({ error: 'Unable to access playlist data - no spotify ID' });
+    }
+    
+    console.log('✅ Backend: Using Spotify ID:', spotifyId);
 
     try {
       // Fetch playlist from Spotify using owner's token
       const playlistResponse = await axios.get(
-        `https://api.spotify.com/v1/playlists/${share.playlist.spotifyId}`,
+        `https://api.spotify.com/v1/playlists/${spotifyId}`,
         {
-          headers: { Authorization: `Bearer ${owner.spotifyAccessToken}` }
+          headers: { Authorization: `Bearer ${accessToken}` }
         }
       );
 
       // Fetch all tracks with pagination
       let allTracks = [];
-      let nextUrl = `https://api.spotify.com/v1/playlists/${share.playlist.spotifyId}/tracks?limit=50`;
+      let nextUrl = `https://api.spotify.com/v1/playlists/${spotifyId}/tracks?limit=50`;
       
       while (nextUrl) {
         const tracksResponse = await axios.get(nextUrl, {
-          headers: { Authorization: `Bearer ${owner.spotifyAccessToken}` }
+          headers: { Authorization: `Bearer ${accessToken}` }
         });
         
         allTracks = allTracks.concat(tracksResponse.data.items);
         nextUrl = tracksResponse.data.next;
       }
 
-      // Get comments for the playlist
-      const comments = await Comment.find({ playlist: share.playlist._id })
+      // Get all comments for the playlist (both playlist-level and song-level)
+      const allComments = await Comment.find({ playlist: share.playlist._id })
         .populate('user', 'displayName')
         .sort('-createdAt')
         .lean();
+
+      // Separate playlist comments and song comments
+      const playlistComments = allComments.filter(comment => !comment.trackId);
+      const songComments = allComments.filter(comment => comment.trackId);
+
+      // Organize song comments by trackId
+      const songCommentsByTrack = {};
+      songComments.forEach(comment => {
+        if (!songCommentsByTrack[comment.trackId]) {
+          songCommentsByTrack[comment.trackId] = [];
+        }
+        songCommentsByTrack[comment.trackId].push({
+          id: comment._id,
+          text: comment.content,
+          author: comment.user?.displayName || comment.anonymousName || 'Anonymous',
+          timestamp: comment.createdAt,
+          songId: comment.trackId
+        });
+      });
+
+      console.log('✅ Backend: Found comments:', {
+        playlistComments: playlistComments.length,
+        songComments: songComments.length,
+        songCommentsByTrack: Object.keys(songCommentsByTrack).length
+      });
 
       // Return combined data
       res.json({
@@ -293,7 +364,7 @@ export const getSharedPlaylist = async (req, res) => {
             items: allTracks,
             total: allTracks.length
           },
-          comments: comments || [],
+          comments: playlistComments || [],
           _id: share.playlist._id,
           isShared: true,
           shareInfo: {
@@ -301,6 +372,16 @@ export const getSharedPlaylist = async (req, res) => {
             sharedBy: share.createdBy.displayName,
             accessCount: share.accessCount
           }
+        },
+        songComments: songCommentsByTrack, // Add song comments organized by trackId
+        spotifyTracks: allTracks || [],
+        comments: playlistComments || [],
+        share: {
+          shareToken: share.shareToken,
+          permissions: share.permissions,
+          createdAt: share.createdAt,
+          accessCount: share.accessCount + 1,
+          expiresAt: share.expiresAt
         }
       });
 
@@ -318,8 +399,10 @@ export const getSharedPlaylist = async (req, res) => {
 // Add comment to shared playlist
 export const addCommentToShared = async (req, res) => {
   try {
-    const { shareToken } = req.params;
+    const { shareToken, songId } = req.params; // songId is optional for playlist-level comments
     const { content, authorName = 'Anonymous' } = req.body;
+    
+    console.log('🎵 Backend: Adding comment to shared playlist:', { shareToken, songId, content, authorName });
     
     if (!content || content.trim().length === 0) {
       return res.status(400).json({ error: 'Comment content is required' });
@@ -338,10 +421,11 @@ export const addCommentToShared = async (req, res) => {
       return res.status(403).json({ error: 'Comments not allowed for this shared playlist' });
     }
 
-    // Create comment
+    // Create comment (song-level if songId provided, playlist-level otherwise)
     const comment = new Comment({
       content: content.trim(),
       playlist: share.playlist._id,
+      trackId: songId || null, // Set trackId for song comments, null for playlist comments
       user: req.user?._id || null, // null for anonymous users
       isAnonymous: !req.user,
       anonymousName: req.user ? null : authorName
@@ -352,13 +436,17 @@ export const addCommentToShared = async (req, res) => {
     // Populate user info for response
     await comment.populate('user', 'displayName');
 
-    res.json({
+    const response = {
       _id: comment._id,
       content: comment.content,
       user: comment.user || { displayName: comment.anonymousName },
       createdAt: comment.createdAt,
-      isAnonymous: comment.isAnonymous
-    });
+      isAnonymous: comment.isAnonymous,
+      trackId: comment.trackId
+    };
+
+    console.log('✅ Backend: Comment added successfully:', response);
+    res.json(response);
 
   } catch (error) {
     console.error('Error adding comment to shared playlist:', error);

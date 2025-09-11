@@ -35,7 +35,7 @@ router.get('/user/profile', authenticateToken, getUserProfile);
 router.get('/playlists', authenticateToken, getUserPlaylists);
 router.get('/playlists/:playlistId', authenticateToken, getPlaylistDetails);
 router.post('/playlists', authenticateToken, createPlaylist);
-router.get('/playlists/:playlistId/share', authenticateToken, generateShareableLink);
+// Note: removed old generateShareableLink route - now using getShareLink below
 
 // Comment routes
 router.get('/playlists/:playlistId/comments', authenticateToken, getComments);
@@ -55,8 +55,18 @@ router.delete('/playlists/:playlistId/share', authenticateToken, revokeShareAcce
 router.put('/playlists/:playlistId/share', authenticateToken, updateSharePermissions);
 
 // Public sharing routes (no authentication required)
-router.get('/shared/:shareToken', optionalAuth, getSharedPlaylist);
-router.post('/shared/:shareToken/comments', optionalAuth, addCommentToShared);
+router.get('/shared/:shareToken', (req, res, next) => {
+  console.log('🛣️  Route: /shared/:shareToken hit with token:', req.params.shareToken);
+  next();
+}, getSharedPlaylist);
+router.post('/shared/:shareToken/comments', addCommentToShared);
 router.get('/shared/:shareToken/comments', getSharedPlaylistComments);
+router.post('/shared/:shareToken/songs/:songId/comments', addCommentToShared); // Song-level comments for shared playlists
+
+// Test endpoint (after parameterized routes)
+router.get('/shared-test', (req, res) => {
+  console.log('🧪 Backend: Test endpoint hit!');
+  res.json({ message: 'Backend is working!', timestamp: new Date() });
+});
 
 export default router;

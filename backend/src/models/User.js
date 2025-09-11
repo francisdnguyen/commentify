@@ -30,4 +30,8 @@ userSchema.pre('save', function(next) {
   next();
 });
 
+// Indexes for fast lookups
+// Note: spotifyId already has unique: true above, no need for explicit index
+userSchema.index({ email: 1 }); // Fast email lookups
+
 export default mongoose.model('User', userSchema);

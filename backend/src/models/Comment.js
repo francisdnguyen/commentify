@@ -13,7 +13,16 @@ const commentSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false // Allow null for anonymous comments
+  },
+  // Anonymous comment support
+  isAnonymous: {
+    type: Boolean,
+    default: false
+  },
+  anonymousName: {
+    type: String,
+    default: null
   },
   content: {
     type: String,
@@ -40,7 +49,13 @@ commentSchema.pre('save', function(next) {
   next();
 });
 
-// Create a compound index for playlist and trackId to optimize queries
-commentSchema.index({ playlist: 1, trackId: 1 });
+// Strategic indexes for optimal performance
+commentSchema.index({ playlist: 1, trackId: 1 }); // Existing compound index
+commentSchema.index({ playlist: 1 }); // Fast playlist comment lookups
+commentSchema.index({ trackId: 1 }); // Fast song comment lookups
+commentSchema.index({ user: 1 }); // Fast user comment lookups
+commentSchema.index({ createdAt: -1 }); // Fast recent comments sorting
+commentSchema.index({ playlist: 1, createdAt: -1 }); // Fast recent comments per playlist
+commentSchema.index({ playlist: 1, user: 1 }); // Fast user comments per playlist
 
 export default mongoose.model('Comment', commentSchema);

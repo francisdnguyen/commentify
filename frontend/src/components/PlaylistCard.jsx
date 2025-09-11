@@ -47,13 +47,13 @@ function PlaylistCard({ playlist }) {
           <div className="flex items-center mt-3 space-x-3">
             <Link
               to={`/playlist/${playlist.id}`}
-              className="px-3 py-1 bg-gray-500 dark:bg-gray-600 text-white rounded-lg hover:bg-gray-600 dark:hover:bg-gray-700 text-sm transition-colors duration-200"
+              className="px-3 py-1 bg-green-500 dark:bg-green-600 text-white rounded-lg hover:bg-green-600 dark:hover:bg-green-700 text-sm transition-colors duration-200"
             >
               View Details
             </Link>
             <button
               onClick={handleShare}
-              className="px-3 py-1 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 text-sm transition-colors duration-200"
+              className="px-3 py-1 bg-gray-500 dark:bg-gray-600 text-white rounded-lg hover:bg-gray-600 dark:hover:bg-gray-700 text-sm transition-colors duration-200"
             >
               Share
             </button>

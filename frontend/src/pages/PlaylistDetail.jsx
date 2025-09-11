@@ -4,6 +4,7 @@ import { getPlaylistDetails, getUserProfile, getAllSongCommentsForPlaylist, addS
 import CommentSection from '../components/CommentSection';
 import ThemeToggle from '../components/ThemeToggle';
 import SongCommentModal from '../components/SongCommentModal';
+import ShareModal from '../components/ShareModal';
 import { useCache } from '../contexts/CacheContext';
 
 function PlaylistDetail() {
@@ -19,6 +20,9 @@ function PlaylistDetail() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState(null);
   const [songComments, setSongComments] = useState({});
+
+  // Share modal state
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -41,17 +45,22 @@ function PlaylistDetail() {
         const cachedPlaylist = cache.getCachedPlaylistDetails(playlistId);
         const cachedUser = cache.getCachedUserProfile();
 
+        // Prepare variables for batch state update
+        let finalPlaylist = null;
+        let finalUser = null;
+        let finalComments = {};
+
         if (cachedPlaylist && cachedUser) {
           console.log('Loading playlist from cache...');
-          setPlaylist(cachedPlaylist);
-          setUser(cachedUser);
+          finalPlaylist = cachedPlaylist;
+          finalUser = cachedUser;
         } else {
           console.log('Cache miss, fetching fresh playlist data...');
           
           // Fetch playlist details
           const playlistResponse = await getPlaylistDetails(playlistId);
           const playlistData = playlistResponse.data;
-          setPlaylist(playlistData);
+          finalPlaylist = playlistData;
           
           // Cache the playlist data
           cache.setPlaylistDetails(playlistId, playlistData);
@@ -64,10 +73,11 @@ function PlaylistDetail() {
               userData = userResponse.data;
               cache.setUserProfile(userData);
             }
-            setUser(userData);
+            finalUser = userData;
           } catch (userErr) {
             console.error('Error fetching user profile:', userErr);
             // Don't fail the whole component if user profile fails
+            finalUser = cachedUser; // Use cached if available
           }
         }
 
@@ -88,14 +98,18 @@ function PlaylistDetail() {
             }));
           });
           
-          setSongComments(transformedComments);
+          finalComments = transformedComments;
         } catch (songCommentsErr) {
           console.error('Error fetching song comments:', songCommentsErr);
           // Don't fail if song comments can't be loaded
-          setSongComments({});
+          finalComments = {};
         }
 
-        // Loading will be set to false in the finally block
+        // 🎯 BATCH STATE UPDATE - All at once to prevent multiple renders!
+        console.log('🎯 Setting all data in single batch update...');
+        setPlaylist(finalPlaylist);
+        setUser(finalUser);
+        setSongComments(finalComments);
         
       } catch (err) {
         console.error('Error fetching playlist data:', err.response?.data || err.message);
@@ -128,6 +142,7 @@ function PlaylistDetail() {
   const addSongComment = async (songId, commentText) => {
     try {
       // Save comment to backend
+      console.log('Adding comment to backend...');
       const response = await apiAddSongComment(playlistId, songId, commentText);
       const newComment = response.data;
 
@@ -142,6 +157,13 @@ function PlaylistDetail() {
           songId: songId
         }]
       }));
+
+      // SELECTIVE CACHE INVALIDATION: Clear only playlists cache 
+      // This ensures Dashboard will fetch fresh playlist data with updated comment status
+      // while keeping user profile cached for fast loading
+      cache.clearPlaylistsCache();
+      console.log('✅ Cleared playlists cache - Dashboard will show updated comment status');
+
     } catch (error) {
       console.error('Error adding song comment:', error);
       // Fallback to local storage if backend fails
@@ -227,7 +249,21 @@ function PlaylistDetail() {
             className="w-48 h-48 object-cover rounded-lg shadow-md"
           />
           <div>
-            <h1 className="text-3xl font-bold mb-2 text-gray-900 dark:text-gray-100">{playlist?.name || 'Untitled Playlist'}</h1>
+            <div className="flex items-center gap-4 mb-2">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{playlist?.name || 'Untitled Playlist'}</h1>
+              {/* Share button - show for all playlists when user is logged in */}
+              {user && (
+                <button
+                  onClick={() => setIsShareModalOpen(true)}
+                  className="flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/30 dark:hover:text-blue-300 transition-colors duration-200"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                  </svg>
+                  Share
+                </button>
+              )}
+            </div>
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               {decodeHtmlEntities(playlist.description) || ''}
             </p>
@@ -374,6 +410,14 @@ function PlaylistDetail() {
         playlistId={playlistId}
         comments={selectedSong ? songComments[selectedSong.id] || [] : []}
         onAddComment={addSongComment}
+      />
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        playlistId={playlistId}
+        playlistName={playlist?.name}
       />
     </div>
   );

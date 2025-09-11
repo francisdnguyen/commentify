@@ -6,7 +6,9 @@ function SongCommentModal({
   song, 
   playlistId,
   comments = [],
-  onAddComment 
+  onAddComment,
+  isSharedPlaylist = false,
+  anonymousName = ''
 }) {
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,6 +36,12 @@ function SongCommentModal({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!newComment.trim()) return;
+
+    // Check for anonymous name in shared playlist mode
+    if (isSharedPlaylist && !anonymousName.trim()) {
+      alert('Please enter your name to comment on this shared playlist');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -94,8 +102,13 @@ function SongCommentModal({
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-2">
                           <span className="font-medium text-gray-900 dark:text-gray-100">
-                            {comment.author || 'Anonymous'}
+                            {comment.isAnonymous ? (comment.anonymousName || 'Anonymous') : (comment.author || 'Anonymous')}
                           </span>
+                          {comment.isAnonymous && (
+                            <span className="px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-400 rounded-full">
+                              Guest
+                            </span>
+                          )}
                           <span className="text-xs text-gray-500 dark:text-gray-400">
                             {comment.timestamp ? new Date(comment.timestamp).toLocaleDateString() : 'Just now'}
                           </span>
@@ -120,11 +133,23 @@ function SongCommentModal({
 
           {/* Comment Input */}
           <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+            {isSharedPlaylist && (
+              <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-sm text-blue-800 dark:text-blue-300">
+                  💡 Commenting as: <strong>{anonymousName || 'Anonymous'}</strong>
+                  {!anonymousName.trim() && ' (Please set your name above to comment)'}
+                </p>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-3">
               <textarea
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Share your thoughts about this song..."
+                placeholder={
+                  isSharedPlaylist 
+                    ? "Share your thoughts about this song..." 
+                    : "Share your thoughts about this song..."
+                }
                 className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 transition-colors duration-200"
                 rows="3"
                 disabled={isSubmitting}
@@ -140,7 +165,7 @@ function SongCommentModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={!newComment.trim() || isSubmitting}
+                  disabled={!newComment.trim() || isSubmitting || (isSharedPlaylist && !anonymousName.trim())}
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                 >
                   {isSubmitting ? 'Posting...' : 'Post Comment'}

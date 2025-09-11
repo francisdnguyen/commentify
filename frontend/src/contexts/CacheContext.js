@@ -8,6 +8,7 @@ const CACHE_ACTIONS = {
   SET_PLAYLISTS: 'SET_PLAYLISTS',
   SET_PLAYLIST_DETAILS: 'SET_PLAYLIST_DETAILS',
   CLEAR_CACHE: 'CLEAR_CACHE',
+  CLEAR_PLAYLISTS_CACHE: 'CLEAR_PLAYLISTS_CACHE',
   SET_CACHE_TIMESTAMP: 'SET_CACHE_TIMESTAMP'
 };
 
@@ -53,6 +54,14 @@ const cacheReducer = (state, action) => {
         playlists: null,
         playlistDetails: {},
         timestamps: {}
+      };
+    
+    case CACHE_ACTIONS.CLEAR_PLAYLISTS_CACHE:
+      const { playlists: removedPlaylists, ...remainingTimestamps } = state.timestamps;
+      return {
+        ...state,
+        playlists: null,
+        timestamps: remainingTimestamps
       };
     
     default:
@@ -107,6 +116,10 @@ export const CacheProvider = ({ children }) => {
     dispatch({ type: CACHE_ACTIONS.CLEAR_CACHE });
   };
 
+  const clearPlaylistsCache = () => {
+    dispatch({ type: CACHE_ACTIONS.CLEAR_PLAYLISTS_CACHE });
+  };
+
   // Getters with cache validation
   const getCachedUserProfile = () => {
     if (isCacheValid('userProfile')) {
@@ -138,6 +151,7 @@ export const CacheProvider = ({ children }) => {
     setPlaylists,
     setPlaylistDetails,
     clearCache,
+    clearPlaylistsCache,
     
     // Getters
     getCachedUserProfile,

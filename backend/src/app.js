@@ -6,9 +6,88 @@ import mongoose from "mongoose";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/auth.js";
 import apiRoutes from "./routes/api.js";
+import Comment from "./models/Comment.js";
+import User from "./models/User.js";
+import Playlist from "./models/Playlist.js";
+import Share from "./models/Share.js";
 
 // Connect to MongoDB
 connectDB();
+
+// Clear all data and reset database IDs for testing when server starts
+const resetDatabaseForTesting = async () => {
+  try {
+    console.log('🔄 Resetting database for testing...');
+    
+    // Drop all collections to reset IDs completely AND clear indexes
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    
+    for (const collection of collections) {
+      // Skip system collections and session store
+      if (!collection.name.startsWith('system.') && collection.name !== 'sessions') {
+        await mongoose.connection.db.dropCollection(collection.name);
+        console.log(`   ✅ Dropped collection: ${collection.name}`);
+      }
+    }
+    
+    console.log('🗑️  All data and indexes cleared for testing');
+    console.log('📝 Database is now in fresh state with reset ObjectIds');
+  } catch (error) {
+    // If collections don't exist, that's fine for first run
+    if (error.message.includes('ns not found')) {
+      console.log('📝 Database already clean (first run)');
+    } else {
+      console.error('❌ Error resetting database:', error);
+    }
+  }
+};
+
+// Call the function after DB connection
+mongoose.connection.once('open', async () => {
+  console.log('MongoDB connected successfully');
+  
+  try {
+    // Reset database for testing first
+    await resetDatabaseForTesting();
+    
+    // Ensure all indexes are created for optimal performance
+    console.log('🔧 Creating database indexes...');
+    
+    // Create indexes with better error handling
+    try {
+      await Comment.init(); // Creates all Comment model indexes
+      console.log('✅ Comment indexes created');
+    } catch (error) {
+      console.error('⚠️  Comment index creation warning:', error.message);
+    }
+
+    try {
+      await User.init(); // Creates all User model indexes  
+      console.log('✅ User indexes created');
+    } catch (error) {
+      console.error('⚠️  User index creation warning:', error.message);
+    }
+
+    try {
+      await Playlist.init(); // Creates all Playlist model indexes
+      console.log('✅ Playlist indexes created');
+    } catch (error) {
+      console.error('⚠️  Playlist index creation warning:', error.message);
+    }
+
+    try {
+      await Share.init(); // Creates all Share model indexes
+      console.log('✅ Share indexes created');
+    } catch (error) {
+      console.error('⚠️  Share index creation warning:', error.message);
+    }
+    
+    console.log('✅ All database indexes created successfully');
+    console.log('🚀 Server ready for testing with fresh database');
+  } catch (error) {
+    console.error('❌ Error setting up database:', error);
+  }
+});
 
 const app = express();
 

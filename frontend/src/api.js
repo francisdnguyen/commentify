@@ -69,3 +69,36 @@ export const getSongComments = (playlistId, trackId) => {
 export const getAllSongCommentsForPlaylist = (playlistId) => {
   return api.get(`/api/playlists/${playlistId}/song-comments`);
 };
+
+// Sharing API calls
+export const createShareLink = (playlistId, options = {}) => {
+  return api.post(`/api/playlists/${playlistId}/share`, options);
+};
+
+export const getShareLink = (playlistId) => {
+  return api.get(`/api/playlists/${playlistId}/share`);
+};
+
+export const updateSharePermissions = (playlistId, permissions) => {
+  return api.put(`/api/playlists/${playlistId}/share`, permissions);
+};
+
+export const revokeShareAccess = (playlistId) => {
+  return api.delete(`/api/playlists/${playlistId}/share`);
+};
+
+// Public sharing API calls (no authentication required)
+export const getSharedPlaylist = (shareToken) => {
+  return axios.get(`http://localhost:5000/api/shared/${shareToken}`);
+};
+
+export const addCommentToShared = (shareToken, content, authorName = 'Anonymous') => {
+  return axios.post(`http://localhost:5000/api/shared/${shareToken}/comments`, {
+    content,
+    authorName
+  });
+};
+
+export const getSharedPlaylistComments = (shareToken) => {
+  return axios.get(`http://localhost:5000/api/shared/${shareToken}/comments`);
+};

@@ -27,12 +27,15 @@ export const getUserPlaylists = async (req, res) => {
     }).select('spotifyId _id');
     console.log('Playlists found in our database:', allPlaylistsInDB);
     
-    // Check all comments in the database for these playlists
+    // Check all comments in the database for these playlists (with performance timing)
+    const commentQueryStart = Date.now();
     const allComments = await Comment.find({
       playlist: { $in: allPlaylistsInDB.map(p => p._id) }
     }).select('playlist trackId content');
-    console.log('All comments for these playlists:', allComments);
+    const commentQueryTime = Date.now() - commentQueryStart;
+    console.log(`⚡ Comment query completed in ${commentQueryTime}ms (found ${allComments.length} comments)`);
     
+    const aggregationStart = Date.now();
     const playlistsWithComments = await Playlist.aggregate([
       {
         $match: {
@@ -59,6 +62,8 @@ export const getUserPlaylists = async (req, res) => {
         }
       }
     ]);
+    const aggregationTime = Date.now() - aggregationStart;
+    console.log(`⚡ Aggregation query completed in ${aggregationTime}ms (found ${playlistsWithComments.length} playlists with comments)`);
     
     console.log('Playlists with comments:', playlistsWithComments.map(p => ({ 
       spotifyId: p.spotifyId, 

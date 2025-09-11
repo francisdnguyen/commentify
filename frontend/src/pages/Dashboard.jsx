@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import PlaylistCard from '../components/PlaylistCard';
@@ -27,15 +27,14 @@ function Dashboard() {
       if (!mounted) return;
 
       try {
-        setLoading(true);
-        setError(null);
-
-        // Check cache first
+        // SELECTIVE CACHE LOADING
         const cachedUserProfile = cache.getCachedUserProfile();
         const cachedPlaylists = cache.getCachedPlaylists();
 
+        // Strategy: Load user profile from cache instantly, fetch playlists based on cache status
         if (cachedUserProfile && cachedPlaylists) {
-          console.log('Loading from cache...');
+          // Both cached - fast load
+          console.log('📋 Loading from cache (user profile + playlists)...');
           if (mounted) {
             setUserProfile(cachedUserProfile);
             setAllPlaylists(cachedPlaylists);
@@ -45,7 +44,19 @@ function Dashboard() {
           return;
         }
 
-        console.log('Cache miss, fetching fresh data...');
+        if (cachedUserProfile && !cachedPlaylists) {
+          // Profile cached, playlists cleared (likely after adding comment)
+          console.log('👤 User profile cached, fetching fresh playlists for updated comment status...');
+          if (mounted) {
+            setUserProfile(cachedUserProfile); // Show profile immediately
+            setLoading(true); // Keep loading for playlists
+          }
+        } else {
+          // Full cache miss
+          console.log('🆕 Cache miss, fetching fresh data...');
+          setLoading(true);
+          setError(null);
+        }
 
         // Add a small delay to ensure auth state is settled
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -62,27 +73,57 @@ function Dashboard() {
           return;
         }
 
-        // Fetch data with individual error handling
+        // Smart fetching: Only fetch what's not cached
         try {
-          const [profileResponse, playlistsResponse] = await Promise.all([
-            axios.get('https://api.spotify.com/v1/me', {
-              headers: { 'Authorization': `Bearer ${accessToken}` }
-            }),
-            getUserPlaylists()
-          ]);
+          const requests = [];
+          
+          // Only fetch user profile if not cached
+          if (!cachedUserProfile) {
+            requests.push(
+              axios.get('https://api.spotify.com/v1/me', {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+              })
+            );
+          }
+          
+          // Always fetch playlists if not cached (ensures fresh comment status)
+          if (!cachedPlaylists) {
+            requests.push(getUserPlaylists());
+          }
+
+          const responses = await Promise.all(requests);
 
           if (mounted) {
-            const profileData = profileResponse.data;
-            const playlistsData = playlistsResponse.data;
+            let profileData = cachedUserProfile;
+            let playlistsData;
+
+            if (!cachedUserProfile && !cachedPlaylists) {
+              // Both fetched
+              profileData = responses[0].data;
+              playlistsData = responses[1].data;
+            } else if (!cachedUserProfile && cachedPlaylists) {
+              // Only profile fetched (unlikely scenario)
+              profileData = responses[0].data;
+              playlistsData = cachedPlaylists;
+            } else if (cachedUserProfile && !cachedPlaylists) {
+              // Only playlists fetched (common after comment addition)
+              playlistsData = responses[0].data;
+            }
 
             // Update state
-            setUserProfile(profileData);
-            setAllPlaylists(playlistsData);
-            setPlaylists(playlistsData);
-
-            // Update cache
-            cache.setUserProfile(profileData);
-            cache.setPlaylists(playlistsData);
+            if (!cachedUserProfile) {
+              setUserProfile(profileData);
+              cache.setUserProfile(profileData);
+            }
+            
+            if (!cachedPlaylists) {
+              setAllPlaylists(playlistsData);
+              setPlaylists(playlistsData);
+              cache.setPlaylists(playlistsData);
+              console.log('✅ Fresh playlists loaded with updated comment status');
+            }
+            
+            setLoading(false);
           }
         } catch (error) {
           console.error('API request failed:', error);
@@ -92,6 +133,11 @@ function Dashboard() {
               navigate('/');
             }
           }
+        }
+      } catch (error) {
+        console.error('Unexpected error:', error);
+        if (mounted) {
+          setError('An unexpected error occurred');
         }
       } finally {
         if (mounted) {
@@ -124,7 +170,7 @@ function Dashboard() {
   }, [isFilterDropdownOpen, isCommentFilterDropdownOpen]);
 
   // Filter playlists based on ownership and comments
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     if (!userProfile || !allPlaylists.length) return;
     
     let filtered = [...allPlaylists];
@@ -156,7 +202,7 @@ function Dashboard() {
     }
     
     setPlaylists(filtered);
-  };
+  }, [filter, commentFilter, allPlaylists, userProfile]);
 
   // Filter playlists based on ownership
   const filterPlaylists = (filterType) => {
@@ -181,7 +227,7 @@ function Dashboard() {
   // Apply filters whenever filter state changes
   useEffect(() => {
     applyFilters();
-  }, [filter, commentFilter, allPlaylists, userProfile]);
+  }, [applyFilters]);
 
   const getFilterDisplayText = () => {
     switch (filter) {
@@ -215,8 +261,22 @@ function Dashboard() {
         <div className="flex items-center gap-6">
           <ThemeToggle />
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Welcome, {userProfile?.display_name}</h1>
-            <p className="text-gray-600 dark:text-gray-400">Here are your playlists</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
+              Welcome, {userProfile?.display_name}
+              {loading && !userProfile && (
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" 
+                     title="Loading..."></div>
+              )}
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Here are your playlists
+              {loading && userProfile && !playlists.length && (
+                <span className="ml-2 text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                  <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  Refreshing comment status...
+                </span>
+              )}
+            </p>
           </div>
         </div>
         <div className="flex gap-4">
@@ -271,7 +331,7 @@ function Dashboard() {
           <div className="relative">
             <button
               onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
-              className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors duration-200 flex items-center gap-2"
+              className="px-4 py-2 bg-green-500 dark:bg-green-600 text-white rounded-lg hover:bg-green-600 dark:hover:bg-green-700 transition-colors duration-200 flex items-center gap-2"
             >
               {getFilterDisplayText()}
               <svg 
@@ -288,19 +348,19 @@ function Dashboard() {
               <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10 min-w-[160px]">
                 <button
                   onClick={() => filterPlaylists('all')}
-                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${filter === 'all' ? 'bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${filter === 'all' ? 'bg-green-50 dark:bg-green-900 text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}
                 >
                   All Playlists
                 </button>
                 <button
                   onClick={() => filterPlaylists('owned')}
-                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${filter === 'owned' ? 'bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${filter === 'owned' ? 'bg-green-50 dark:bg-green-900 text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}
                 >
                   My Playlists
                 </button>
                 <button
                   onClick={() => filterPlaylists('saved')}
-                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 rounded-b-lg ${filter === 'saved' ? 'bg-blue-50 dark:bg-blue-900 text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 rounded-b-lg ${filter === 'saved' ? 'bg-green-50 dark:bg-green-900 text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}
                 >
                   Saved Playlists
                 </button>

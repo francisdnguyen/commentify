@@ -9,6 +9,7 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import PlaylistDetail from "./pages/PlaylistDetail";
+import SharedPlaylistView from "./pages/SharedPlaylistView";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
             <Route path="/contact" element={<Contact />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/playlist/:playlistId" element={<PlaylistDetail />} />
+            <Route path="/shared/:shareToken" element={<SharedPlaylistView />} />
             <Route path="/" element={<HomePage />} />
           </Routes>
         </Router>

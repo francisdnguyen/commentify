@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getPlaylistComments, addComment, editComment, deleteComment } from '../api';
+import { useCache } from '../contexts/CacheContext';
 
 const CommentSection = ({ playlistId }) => {
   const [comments, setComments] = useState([]);
@@ -7,6 +8,7 @@ const CommentSection = ({ playlistId }) => {
   const [editingComment, setEditingComment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const cache = useCache();
 
   const fetchComments = useCallback(async () => {
     try {
@@ -30,9 +32,14 @@ const CommentSection = ({ playlistId }) => {
     if (!newComment.trim()) return;
 
     try {
+      console.log('Adding playlist comment...');
       const response = await addComment(playlistId, newComment);
       setComments([response.data, ...comments]);
       setNewComment('');
+
+      // SELECTIVE CACHE INVALIDATION: Clear playlists cache for updated comment status
+      cache.clearPlaylistsCache();
+      console.log('✅ Cleared playlists cache after adding playlist comment');
     } catch (err) {
       setError('Failed to add comment');
     }
@@ -54,8 +61,13 @@ const CommentSection = ({ playlistId }) => {
     if (!window.confirm('Are you sure you want to delete this comment?')) return;
 
     try {
+      console.log('Deleting playlist comment...');
       await deleteComment(commentId);
       setComments(comments.filter(comment => comment._id !== commentId));
+
+      // SELECTIVE CACHE INVALIDATION: Clear playlists cache as comment status may have changed
+      cache.clearPlaylistsCache();
+      console.log('✅ Cleared playlists cache after deleting playlist comment');
     } catch (err) {
       setError('Failed to delete comment');
     }

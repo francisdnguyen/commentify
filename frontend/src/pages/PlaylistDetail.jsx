@@ -92,7 +92,7 @@ function PlaylistDetail() {
             transformedComments[trackId] = rawComments[trackId].map(comment => ({
               id: comment._id,
               text: comment.content,
-              author: comment.user?.displayName || 'Anonymous',
+              author: comment.user?.displayName || comment.anonymousName || 'Anonymous',
               timestamp: comment.createdAt,
               songId: trackId
             }));
@@ -144,7 +144,7 @@ function PlaylistDetail() {
       // Save comment to backend
       console.log('Adding comment to backend...');
       const response = await apiAddSongComment(playlistId, songId, commentText);
-      const newComment = response.data;
+      const  newComment = response.data;
 
       // Update local state to show the comment immediately
       setSongComments(prev => ({

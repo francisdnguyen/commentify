@@ -114,3 +114,7 @@ export const addSongCommentToShared = (shareToken, songId, content, authorName =
 export const getSharedPlaylistComments = (shareToken) => {
   return axios.get(`http://localhost:5000/api/shared/${shareToken}/comments`);
 };
+
+export const markPlaylistAsViewed = (playlistId) => {
+  return api.put(`/api/playlists/${playlistId}/mark-viewed`);
+};

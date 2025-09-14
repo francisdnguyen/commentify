@@ -14,6 +14,11 @@ const userSchema = new mongoose.Schema({
   accessToken: String,
   refreshToken: String,
   tokenExpiry: Date,
+  playlistLastViewed: {
+    type: Map,
+    of: Date,
+    default: new Map()
+  },
   createdAt: {
     type: Date,
     default: Date.now

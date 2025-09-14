@@ -4,7 +4,8 @@ import {
   getPlaylistDetails,
   generateShareableLink,
   createPlaylist,
-  getUserProfile
+  getUserProfile,
+  markPlaylistAsViewed
 } from '../controllers/playlistController.js';
 import {
   addComment,
@@ -35,6 +36,7 @@ router.get('/user/profile', authenticateToken, getUserProfile);
 router.get('/playlists', authenticateToken, getUserPlaylists);
 router.get('/playlists/:playlistId', authenticateToken, getPlaylistDetails);
 router.post('/playlists', authenticateToken, createPlaylist);
+router.put('/playlists/:playlistId/mark-viewed', authenticateToken, markPlaylistAsViewed);
 // Note: removed old generateShareableLink route - now using getShareLink below
 
 // Comment routes

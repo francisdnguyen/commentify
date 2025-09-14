@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getPlaylistDetails, getUserProfile, getAllSongCommentsForPlaylist, addSongComment as apiAddSongComment } from '../api';
+import { getPlaylistDetails, getUserProfile, getAllSongCommentsForPlaylist, addSongComment as apiAddSongComment, markPlaylistAsViewed } from '../api';
 import CommentSection from '../components/CommentSection';
 import ThemeToggle from '../components/ThemeToggle';
 import SongCommentModal from '../components/SongCommentModal';
@@ -111,6 +111,25 @@ function PlaylistDetail() {
         setUser(finalUser);
         setSongComments(finalComments);
         
+        // Mark playlist as viewed to update the user's lastViewed timestamp
+        markPlaylistAsViewed(playlistId).then(() => {
+          // Only clear cache if this playlist had new comments that needed badge updates
+          // Check if the current cached playlists show this playlist with new comments
+          const cachedPlaylists = cache.getCachedPlaylists();
+          const currentPlaylist = cachedPlaylists?.find(p => p.id === playlistId);
+          
+          if (currentPlaylist?.hasNewComments) {
+            // This playlist had new comments, so dashboard needs fresh data to remove badge
+            cache.clearPlaylistsCache();
+            console.log('✅ Playlist had new comments - cleared cache for badge update');
+          } else {
+            // No new comments badge to update, preserve cache for performance
+            console.log('✅ Playlist marked as viewed - cache preserved (no badge changes needed)');
+          }
+        }).catch(err => {
+          console.warn('Failed to mark playlist as viewed:', err);
+        });
+        
       } catch (err) {
         console.error('Error fetching playlist data:', err.response?.data || err.message);
         if (err.response?.status === 404) {
@@ -126,7 +145,8 @@ function PlaylistDetail() {
     };
 
     fetchData();
-  }, [playlistId, cache]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlistId]); // Remove cache dependency to prevent infinite loops
 
   // Modal functions
   const openSongModal = (song) => {
@@ -158,11 +178,35 @@ function PlaylistDetail() {
         }]
       }));
 
-      // SELECTIVE CACHE INVALIDATION: Clear only playlists cache 
-      // This ensures Dashboard will fetch fresh playlist data with updated comment status
-      // while keeping user profile cached for fast loading
-      cache.clearPlaylistsCache();
-      console.log('✅ Cleared playlists cache - Dashboard will show updated comment status');
+      // Update lastViewed timestamp since user just interacted with this playlist
+      // This prevents the comment they just made from showing as "new" on dashboard
+      await markPlaylistAsViewed(playlistId);
+      
+      // SMART CACHE UPDATE: Instead of clearing cache, update it intelligently
+      // This gives us both performance AND accuracy
+      const cachedPlaylists = cache.getCachedPlaylists();
+      if (cachedPlaylists) {
+        const updatedPlaylists = cachedPlaylists.map(playlist => {
+          if (playlist.id === playlistId) {
+            return {
+              ...playlist,
+              // Increment comment count and reset new comment indicators
+              commentCount: (playlist.commentCount || 0) + 1,
+              newCommentCount: 0,
+              hasNewComments: false
+            };
+          }
+          return playlist;
+        });
+        
+        // Update cache with new data instead of clearing it
+        cache.setPlaylists(updatedPlaylists);
+        console.log('✅ Smart cache update - incremented comment count, preserved performance');
+      } else {
+        // Fallback: clear cache if we don't have cached playlists
+        cache.clearPlaylistsCache();
+        console.log('✅ Cache cleared (no cached playlists to update)');
+      }
 
     } catch (error) {
       console.error('Error adding song comment:', error);

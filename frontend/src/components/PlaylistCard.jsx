@@ -26,7 +26,13 @@ function PlaylistCard({ playlist }) {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 hover:shadow-lg transition-all duration-200 border border-gray-200 dark:border-gray-700">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 hover:shadow-lg transition-all duration-200 border border-gray-200 dark:border-gray-700 relative">
+      {/* New Comments Notification Badge */}
+      {playlist.hasNewComments && (
+        <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg z-10">
+          {playlist.newCommentCount} new comment{playlist.newCommentCount !== 1 ? 's' : ''}
+        </div>
+      )}
       <div className="flex items-start space-x-4">
         <img 
           src={playlist.images[0]?.url || '/placeholder-playlist.png'} 
@@ -57,11 +63,6 @@ function PlaylistCard({ playlist }) {
             >
               Share
             </button>
-            {playlist.hasComments && (
-              <span className="text-gray-500 dark:text-gray-100 text-sm">
-                Has comments
-              </span>
-            )}
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getPlaylistComments, addComment, editComment, deleteComment } from '../api';
+import { getPlaylistComments, addComment, editComment, deleteComment, markPlaylistAsViewed } from '../api';
 import { useCache } from '../contexts/CacheContext';
 
 const CommentSection = ({ playlistId }) => {
@@ -37,9 +37,35 @@ const CommentSection = ({ playlistId }) => {
       setComments([response.data, ...comments]);
       setNewComment('');
 
-      // SELECTIVE CACHE INVALIDATION: Clear playlists cache for updated comment status
-      cache.clearPlaylistsCache();
-      console.log('✅ Cleared playlists cache after adding playlist comment');
+      // Update lastViewed timestamp since user just interacted with this playlist
+      // This prevents the comment they just made from showing as "new" on dashboard
+      await markPlaylistAsViewed(playlistId);
+
+      // SMART CACHE UPDATE: Instead of clearing cache, update it intelligently
+      // This gives us both performance AND accuracy  
+      const cachedPlaylists = cache.getCachedPlaylists();
+      if (cachedPlaylists) {
+        const updatedPlaylists = cachedPlaylists.map(playlist => {
+          if (playlist.id === playlistId) {
+            return {
+              ...playlist,
+              // Increment comment count and reset new comment indicators
+              commentCount: (playlist.commentCount || 0) + 1,
+              newCommentCount: 0,
+              hasNewComments: false
+            };
+          }
+          return playlist;
+        });
+        
+        // Update cache with new data instead of clearing it
+        cache.setPlaylists(updatedPlaylists);
+        console.log('✅ Smart cache update for playlist comment - incremented count, preserved performance');
+      } else {
+        // Fallback: clear cache if we don't have cached playlists
+        cache.clearPlaylistsCache();
+        console.log('✅ Cache cleared (no cached playlists to update)');
+      }
     } catch (err) {
       setError('Failed to add comment');
     }

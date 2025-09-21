@@ -113,3 +113,13 @@ export const getSharedPlaylistComments = (shareToken) => {
 export const markPlaylistAsViewed = (playlistId) => {
   return api.put(`/api/playlists/${playlistId}/mark-viewed`);
 };
+
+// Get shared playlist IDs for the current user
+export const getUserSharedPlaylistIds = () => {
+  return api.get('/api/user/shared-playlists');
+};
+
+// Get playlists that have been shared with the current user
+export const getPlaylistsSharedWithMe = () => {
+  return api.get('/api/user/shared-with-me');
+};

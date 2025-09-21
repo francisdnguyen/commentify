@@ -23,7 +23,10 @@ import {
   updateSharePermissions,
   getSharedPlaylist,
   addCommentToShared,
-  getSharedPlaylistComments
+  getSharedPlaylistComments,
+  getUserSharedPlaylists,
+  getUserSharedPlaylistIds,
+  getPlaylistsSharedWithUser
 } from '../controllers/shareController.js';
 import { authenticateToken, optionalAuth } from '../middleware/auth.js';
 
@@ -51,6 +54,9 @@ router.post('/playlists/:playlistId/songs/:trackId/comments', authenticateToken,
 router.get('/playlists/:playlistId/song-comments', authenticateToken, getAllSongCommentsForPlaylist);
 
 // Sharing routes (authenticated)
+router.get('/user/shared-playlists', authenticateToken, getUserSharedPlaylists);
+router.get('/user/shared-playlist-ids', authenticateToken, getUserSharedPlaylistIds);
+router.get('/user/playlists-shared-with-me', authenticateToken, getPlaylistsSharedWithUser);
 router.post('/playlists/:playlistId/share', authenticateToken, createShareLink);
 router.get('/playlists/:playlistId/share', authenticateToken, getShareLink);
 router.delete('/playlists/:playlistId/share', authenticateToken, revokeShareAccess);
@@ -64,11 +70,5 @@ router.get('/shared/:shareToken', (req, res, next) => {
 router.post('/shared/:shareToken/comments', addCommentToShared);
 router.get('/shared/:shareToken/comments', getSharedPlaylistComments);
 router.post('/shared/:shareToken/songs/:songId/comments', addCommentToShared); // Song-level comments for shared playlists
-
-// Test endpoint (after parameterized routes)
-router.get('/shared-test', (req, res) => {
-  console.log('🧪 Backend: Test endpoint hit!');
-  res.json({ message: 'Backend is working!', timestamp: new Date() });
-});
 
 export default router;

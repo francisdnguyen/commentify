@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getPlaylistDetails, getUserProfile, getAllSongCommentsForPlaylist, addSongComment as apiAddSongComment, markPlaylistAsViewed } from '../api';
 import CommentSection from '../components/CommentSection';
@@ -64,22 +64,66 @@ function PlaylistDetail() {
     });
   };
 
-  // Helper function to get the most recent unseen comment timestamp for a track (excluding own comments)
+  // Helper function to get the most recent comment timestamp for a track (for sorting by activity)
   const getMostRecentCommentTime = (trackId) => {
     const comments = songComments[trackId] || [];
     if (comments.length === 0) return 0;
     
+    // For sorting by activity, include ALL comments (including own comments)
+    return Math.max(...comments.map(comment => new Date(comment.timestamp).getTime()));
+  };
+
+  // Function to count the exact number of unseen comments from other users
+  const getUnseenCommentsCount = useCallback(() => {
     const currentUserName = user?.display_name || user?.displayName;
-    const unseenOtherUsersComments = comments.filter(comment => {
-      const isNotOwnComment = comment.author !== currentUserName;
-      const isUnseen = !seenComments.has(comment.id);
-      return isNotOwnComment && isUnseen;
+    
+    let count = 0;
+    Object.values(songComments).forEach(comments => {
+      comments.forEach(comment => {
+        const isNotOwnComment = comment.author !== currentUserName;
+        const isUnseen = !seenComments.has(comment.id);
+        if (isNotOwnComment && isUnseen) {
+          count++;
+        }
+      });
     });
     
-    if (unseenOtherUsersComments.length === 0) return 0;
-    
-    return Math.max(...unseenOtherUsersComments.map(comment => new Date(comment.timestamp).getTime()));
-  };
+    return count;
+  }, [user, songComments, seenComments]);
+
+  // Function to handle playlist marking and cache updating with current unseen count
+  const updatePlaylistViewStatus = useCallback(async () => {
+    try {
+      const unseenCount = getUnseenCommentsCount();
+      
+      // Always mark playlist as viewed in backend when user interacts
+      await markPlaylistAsViewed(playlistId);
+      
+      // Update cache with the current unseen count
+      const cachedPlaylists = cache.getCachedPlaylists();
+      if (cachedPlaylists) {
+        const updatedPlaylists = cachedPlaylists.map(playlist => {
+          if (playlist.id === playlistId) {
+            return {
+              ...playlist,
+              newCommentCount: unseenCount,
+              hasNewComments: unseenCount > 0
+            };
+          }
+          return playlist;
+        });
+        
+        cache.setPlaylists(updatedPlaylists);
+        console.log(`✅ Updated dashboard - ${unseenCount} unseen comments remaining`);
+      } else {
+        // Fallback: clear cache if we don't have cached playlists
+        cache.clearPlaylistsCache();
+        console.log('✅ Cache cleared (no cached playlists to update)');
+      }
+    } catch (err) {
+      console.warn('Failed to update playlist view status:', err);
+    }
+  }, [playlistId, cache, getUnseenCommentsCount]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -156,24 +200,8 @@ function PlaylistDetail() {
         setUser(finalUser);
         setSongComments(finalComments);
         
-        // Mark playlist as viewed to update the user's lastViewed timestamp
-        markPlaylistAsViewed(playlistId).then(() => {
-          // Only clear cache if this playlist had new comments that needed badge updates
-          // Check if the current cached playlists show this playlist with new comments
-          const cachedPlaylists = cache.getCachedPlaylists();
-          const currentPlaylist = cachedPlaylists?.find(p => p.id === playlistId);
-          
-          if (currentPlaylist?.hasNewComments) {
-            // This playlist had new comments, so dashboard needs fresh data to remove badge
-            cache.clearPlaylistsCache();
-            console.log('✅ Playlist had new comments - cleared cache for badge update');
-          } else {
-            // No new comments badge to update, preserve cache for performance
-            console.log('✅ Playlist marked as viewed - cache preserved (no badge changes needed)');
-          }
-        }).catch(err => {
-          console.warn('Failed to mark playlist as viewed:', err);
-        });
+        // Note: We don't mark playlist as viewed here anymore to preserve the 
+        // new comments indicator until user actually sees the comments
         
       } catch (err) {
         console.error('Error fetching playlist data:', err.response?.data || err.message);
@@ -249,6 +277,15 @@ function PlaylistDetail() {
     }
   };
 
+  // Effect to update dashboard with current unseen comment count after seenComments changes
+  useEffect(() => {
+    // Only update if we have song comments and user data loaded
+    if (Object.keys(songComments).length > 0 && user && seenComments.size > 0) {
+      // Update the dashboard with the current count of unseen comments
+      updatePlaylistViewStatus();
+    }
+  }, [seenComments, songComments, user, updatePlaylistViewStatus]); // Dependencies include all data needed for the check
+
   const addSongComment = async (songId, commentText) => {
     try {
       // Save comment to backend
@@ -272,18 +309,17 @@ function PlaylistDetail() {
       // This prevents the comment they just made from showing as "new" on dashboard
       await markPlaylistAsViewed(playlistId);
       
-      // SMART CACHE UPDATE: Instead of clearing cache, update it intelligently
-      // This gives us both performance AND accuracy
+      // SMART CACHE UPDATE: Update comment count but preserve new comment indicators
+      // Only clear new comment indicators when user actually sees other users' comments
       const cachedPlaylists = cache.getCachedPlaylists();
       if (cachedPlaylists) {
         const updatedPlaylists = cachedPlaylists.map(playlist => {
           if (playlist.id === playlistId) {
             return {
               ...playlist,
-              // Increment comment count and reset new comment indicators
-              commentCount: (playlist.commentCount || 0) + 1,
-              newCommentCount: 0,
-              hasNewComments: false
+              // Increment comment count but keep new comment indicators
+              // These will be cleared by our new logic when user actually sees them
+              commentCount: (playlist.commentCount || 0) + 1
             };
           }
           return playlist;
@@ -291,11 +327,11 @@ function PlaylistDetail() {
         
         // Update cache with new data instead of clearing it
         cache.setPlaylists(updatedPlaylists);
-        console.log('✅ Smart cache update - incremented comment count, preserved performance');
+        console.log('✅ Smart cache update - incremented comment count, preserved new comment indicators');
       } else {
-        // Fallback: clear cache if we don't have cached playlists
-        cache.clearPlaylistsCache();
-        console.log('✅ Cache cleared (no cached playlists to update)');
+        // Fallback: don't clear cache since we want to preserve new comment indicators
+        // until user actually sees them
+        console.log('✅ No cached playlists to update, preserving cache');
       }
 
     } catch (error) {
@@ -575,7 +611,7 @@ function PlaylistDetail() {
                       }}
                       className={`p-2 hover:bg-white dark:hover:bg-gray-600 rounded-full relative transition-colors duration-200 ${
                         trackHasNewComments 
-                          ? 'text-orange-500 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-300' 
+                          ? 'text-green-500 hover:text-green-600 dark:text-green-400 dark:hover:text-green-300' 
                           : 'text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
                       }`}
                       title={trackHasNewComments ? "Unseen comments!" : "View comments"}
@@ -586,7 +622,7 @@ function PlaylistDetail() {
                       {commentCount > 0 && (
                         <span className={`absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center ${
                           trackHasNewComments 
-                            ? 'bg-orange-500 animate-pulse' 
+                            ? 'bg-green-500 animate-pulse' 
                             : 'bg-blue-600'
                         }`}>
                           {commentCount}

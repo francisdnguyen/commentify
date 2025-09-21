@@ -17,7 +17,7 @@ function HomePage() {
 
   const handleLogin = () => {
     // Direct redirect to Spotify login
-    window.location.href = 'http://localhost:5000/auth/login';
+    window.location.href = `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}/auth/login`;
   };
 
   return (

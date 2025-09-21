@@ -13,7 +13,7 @@ export const getValidToken = async () => {
   if (!tokenExpiry || Date.now() >= Number(tokenExpiry)) {
     try {
       // Request new token using refresh token
-      const response = await axios.post('http://localhost:5000/auth/refresh', {
+      const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}/auth/refresh`, {
         refresh_token: refreshToken
       });
 

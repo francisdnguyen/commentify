@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getSharedPlaylist, addSongCommentToShared } from '../api';
+import { getSharedPlaylist, addSongCommentToShared, getUserProfile } from '../api';
+import { isAuthenticated } from '../utils/auth';
 import ThemeToggle from '../components/ThemeToggle';
 import SongCommentModal from '../components/SongCommentModal';
+import LoginButton from '../components/LoginButton';
 
 function SharedPlaylistView() {
   const { shareToken } = useParams();
@@ -14,6 +16,10 @@ function SharedPlaylistView() {
   const [playlist, setPlaylist] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Authentication state
+  const [isUserAuthenticated, setIsUserAuthenticated] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
   
   // Song comments modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -39,6 +45,22 @@ function SharedPlaylistView() {
     async function loadSharedPlaylist() {
       try {
         setLoading(true);
+        
+        // Check authentication and load user profile if authenticated
+        const authenticated = isAuthenticated();
+        setIsUserAuthenticated(authenticated);
+        
+        if (authenticated) {
+          try {
+            const profileResponse = await getUserProfile();
+            setUserProfile(profileResponse.data);
+            console.log('User profile loaded:', profileResponse.data);
+          } catch (profileError) {
+            console.log('Failed to load user profile:', profileError);
+            // User is authenticated but profile failed - continue with anonymous
+            setIsUserAuthenticated(false);
+          }
+        }
         
         // Load playlist data (includes song comments)
         const response = await getSharedPlaylist(shareToken);
@@ -78,13 +100,18 @@ function SharedPlaylistView() {
   };
 
   const addSongComment = async (songId, comment) => {
-    if (!anonymousName.trim()) {
-      alert('Please enter your name to comment');
+    // Use authenticated user's name or require anonymous name
+    const commenterName = isUserAuthenticated && userProfile?.display_name 
+      ? userProfile.display_name 
+      : anonymousName.trim();
+    
+    if (!commenterName) {
+      alert(isUserAuthenticated ? 'Unable to get your Spotify username' : 'Please enter your name to comment');
       return;
     }
 
     try {
-      const response = await addSongCommentToShared(shareToken, songId, comment, anonymousName.trim());
+      const response = await addSongCommentToShared(shareToken, songId, comment, commenterName);
       const newComment = response.data;
       
       // Update local state with proper comment format
@@ -189,19 +216,67 @@ function SharedPlaylistView() {
             </div>
           </div>
 
-          {/* Anonymous Name Input */}
+          {/* User Authentication Section */}
           <div className="mb-6">
-            <label htmlFor="anonymous-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Your Name (for comments)
-            </label>
-            <input
-              type="text"
-              id="anonymous-name"
-              value={anonymousName}
-              onChange={(e) => setAnonymousName(e.target.value)}
-              placeholder="Enter your name to comment on songs"
-              className="w-full max-w-md px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+            {isUserAuthenticated && userProfile ? (
+              // Authenticated user section
+              <div className="flex items-center justify-between p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <div className="flex items-center">
+                  <svg className="w-5 h-5 text-green-600 dark:text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <span className="text-green-800 dark:text-green-300 font-medium">
+                      Signed in as {userProfile.display_name}
+                    </span>
+                    <p className="text-sm text-green-600 dark:text-green-400">
+                      Your comments will show your Spotify username
+                    </p>
+                  </div>
+                </div>
+                {userProfile.images?.[0]?.url && (
+                  <img 
+                    src={userProfile.images[0].url} 
+                    alt="Profile" 
+                    className="w-10 h-10 rounded-full"
+                  />
+                )}
+              </div>
+            ) : (
+              // Anonymous/Login section
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <div className="flex items-center">
+                    <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <div>
+                      <span className="text-yellow-800 dark:text-yellow-300 font-medium">
+                        Sign in with Spotify for personalized comments
+                      </span>
+                      <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                        Or continue as anonymous user below
+                      </p>
+                    </div>
+                  </div>
+                  <LoginButton />
+                </div>
+                
+                <div>
+                  <label htmlFor="anonymous-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Your Name (for anonymous comments)
+                  </label>
+                  <input
+                    type="text"
+                    id="anonymous-name"
+                    value={anonymousName}
+                    onChange={(e) => setAnonymousName(e.target.value)}
+                    placeholder="Enter your name to comment on songs"
+                    className="w-full max-w-md px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Playlist Header */}

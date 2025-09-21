@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getValidToken, isAuthenticated } from './utils/auth';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000',
+  baseURL: process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000',
   withCredentials: true
 });
 
@@ -72,12 +72,10 @@ export const getAllSongCommentsForPlaylist = (playlistId) => {
 
 // Sharing API calls
 export const createShareLink = (playlistId, options = {}) => {
-  console.log('🌐 API: Creating share link for playlist:', playlistId, 'with options:', options);
   return api.post(`/api/playlists/${playlistId}/share`, options);
 };
 
 export const getShareLink = (playlistId) => {
-  console.log('🌐 API: Getting share link for playlist:', playlistId);
   return api.get(`/api/playlists/${playlistId}/share`);
 };
 
@@ -91,10 +89,7 @@ export const revokeShareAccess = (playlistId) => {
 
 // Public sharing API calls (no authentication required)
 export const getSharedPlaylist = (shareToken) => {
-  console.log('🌐 API: Getting shared playlist for token:', shareToken);
-  const url = `http://localhost:5000/api/shared/${shareToken}`;
-  console.log('🌐 API: Full URL:', url);
-  return axios.get(url);
+  return axios.get(`http://localhost:5000/api/shared/${shareToken}`);
 };
 
 export const addCommentToShared = (shareToken, content, authorName = 'Anonymous') => {

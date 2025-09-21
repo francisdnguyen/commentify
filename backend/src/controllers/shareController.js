@@ -58,7 +58,7 @@ export const createShareLink = async (req, res) => {
       
       return res.json({
         shareToken: existingShare.shareToken,
-        shareUrl: `http://localhost:3000/shared/${existingShare.shareToken}`,
+        shareUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/shared/${existingShare.shareToken}`,
         permissions: existingShare.permissions,
         expiresAt: existingShare.expiresAt,
         accessCount: existingShare.accessCount
@@ -101,7 +101,7 @@ export const createShareLink = async (req, res) => {
 
     res.json({
       shareToken,
-      shareUrl: `http://localhost:3000/shared/${shareToken}`,
+      shareUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/shared/${shareToken}`,
       permissions: {
         allowComments,
         requireAuth
@@ -487,5 +487,203 @@ export const getSharedPlaylistComments = async (req, res) => {
   } catch (error) {
     console.error('Error getting shared playlist comments:', error);
     res.status(500).json({ error: 'Failed to get comments' });
+  }
+};
+
+// Get user's shared playlists (playlists they shared with others)
+// Get the Spotify IDs of playlists shared by the current user
+export const getUserSharedPlaylistIds = async (req, res) => {
+  try {
+    console.log('🔍 Backend: Getting shared playlist IDs for user:', req.user._id);
+    
+    // Find all active shares created by this user and get just the spotify IDs
+    const shares = await Share.find({ 
+      createdBy: req.user._id, 
+      isActive: true 
+    }).populate({
+      path: 'playlist',
+      select: 'spotifyId' // Only select the spotifyId field
+    });
+
+    // Extract just the Spotify IDs
+    const sharedPlaylistIds = shares.map(share => share.playlist.spotifyId);
+
+    console.log('✅ Backend: Found', sharedPlaylistIds.length, 'shared playlist IDs:', sharedPlaylistIds);
+    res.json({ sharedPlaylistIds });
+
+  } catch (error) {
+    console.error('Error getting user shared playlist IDs:', error);
+    res.status(500).json({ error: 'Failed to get shared playlist IDs' });
+  }
+};
+
+export const getUserSharedPlaylists = async (req, res) => {
+  try {
+    console.log('🔍 Backend: Getting shared playlists for user:', req.user._id);
+    
+    // Find all active shares created by this user
+    const shares = await Share.find({ 
+      createdBy: req.user._id, 
+      isActive: true 
+    }).populate({
+      path: 'playlist',
+      populate: {
+        path: 'owner',
+        select: 'displayName spotifyId'
+      }
+    });
+
+    // Fetch Spotify data for each shared playlist
+    const sharedPlaylistsPromises = shares.map(async (share) => {
+      try {
+        const spotifyId = share.playlist.spotifyId;
+        
+        // Fetch playlist details from Spotify
+        const playlistResponse = await axios.get(`https://api.spotify.com/v1/playlists/${spotifyId}`, {
+          headers: {
+            'Authorization': `Bearer ${req.user.spotifyAccessToken}`
+          }
+        });
+
+        // Return the Spotify playlist data with our share info
+        return {
+          ...playlistResponse.data,
+          shareInfo: {
+            shareToken: share.shareToken,
+            shareUrl: `/shared/${share.shareToken}`,
+            createdAt: share.createdAt,
+            expiresAt: share.expiresAt,
+            accessCount: share.accessCount,
+            lastAccessed: share.lastAccessed,
+            permissions: share.permissions
+          }
+        };
+      } catch (spotifyError) {
+        console.error('Error fetching Spotify data for playlist:', share.playlist.spotifyId, spotifyError.message);
+        
+        // Fallback to database data if Spotify fetch fails
+        return {
+          ...share.playlist.toObject(),
+          images: [], // Empty array for missing images
+          tracks: { total: 0 }, // Default tracks object
+          shareInfo: {
+            shareToken: share.shareToken,
+            shareUrl: `/shared/${share.shareToken}`,
+            createdAt: share.createdAt,
+            expiresAt: share.expiresAt,
+            accessCount: share.accessCount,
+            lastAccessed: share.lastAccessed,
+            permissions: share.permissions
+          }
+        };
+      }
+    });
+
+    const sharedPlaylists = await Promise.all(sharedPlaylistsPromises);
+
+    console.log('✅ Backend: Found', sharedPlaylists.length, 'shared playlists');
+    res.json(sharedPlaylists);
+
+  } catch (error) {
+    console.error('Error getting user shared playlists:', error);
+    res.status(500).json({ error: 'Failed to get shared playlists' });
+  }
+};
+
+// Get playlists shared WITH the current user (playlists others shared with them)
+export const getPlaylistsSharedWithUser = async (req, res) => {
+  try {
+    console.log('🔍 Backend: Getting playlists shared with user:', req.user._id);
+    
+    // Find all active shares where:
+    // 1. The playlist owner is NOT the current user (they didn't create it)
+    // 2. The share allows access (public shares or specific user access)
+    const shares = await Share.find({ 
+      createdBy: { $ne: req.user._id }, // Not created by current user
+      isActive: true 
+    }).populate({
+      path: 'playlist',
+      populate: {
+        path: 'owner',
+        select: 'displayName spotifyId'
+      }
+    });
+
+    // Filter shares that the current user can access
+    const accessibleShares = shares.filter(share => {
+      // If requireAuth is false, anyone can access
+      if (!share.permissions.requireAuth) {
+        return true;
+      }
+      
+      // If requireAuth is true, check if user has specific access
+      // For now, we'll return all non-auth-required shares
+      // Later, you could add a collaborators field to shares for specific user access
+      return false;
+    });
+
+    // Fetch Spotify data for each accessible shared playlist
+    const sharedPlaylistsPromises = accessibleShares.map(async (share) => {
+      try {
+        const spotifyId = share.playlist.spotifyId;
+        
+        // Use the playlist owner's token to fetch from Spotify
+        const ownerUser = await User.findById(share.playlist.owner._id);
+        if (!ownerUser || !ownerUser.spotifyAccessToken) {
+          console.warn('Owner token not available for playlist:', spotifyId);
+          return null;
+        }
+        
+        // Fetch playlist details from Spotify
+        const playlistResponse = await axios.get(`https://api.spotify.com/v1/playlists/${spotifyId}`, {
+          headers: {
+            'Authorization': `Bearer ${ownerUser.spotifyAccessToken}`
+          }
+        });
+
+        // Return the Spotify playlist data with share info
+        return {
+          ...playlistResponse.data,
+          shareInfo: {
+            shareToken: share.shareToken,
+            shareUrl: `/shared/${share.shareToken}`,
+            createdAt: share.createdAt,
+            expiresAt: share.expiresAt,
+            accessCount: share.accessCount,
+            lastAccessed: share.lastAccessed,
+            permissions: share.permissions,
+            sharedBy: share.playlist.owner.displayName
+          }
+        };
+      } catch (spotifyError) {
+        console.error('Error fetching Spotify data for shared playlist:', share.playlist.spotifyId, spotifyError.message);
+        
+        // Fallback to database data if Spotify fetch fails
+        return {
+          ...share.playlist.toObject(),
+          images: [], // Empty array for missing images
+          tracks: { total: 0 }, // Default tracks object
+          shareInfo: {
+            shareToken: share.shareToken,
+            shareUrl: `/shared/${share.shareToken}`,
+            createdAt: share.createdAt,
+            expiresAt: share.expiresAt,
+            accessCount: share.accessCount,
+            lastAccessed: share.lastAccessed,
+            permissions: share.permissions,
+            sharedBy: share.playlist.owner.displayName
+          }
+        };
+      }
+    });
+
+    const sharedWithMePlaylists = (await Promise.all(sharedPlaylistsPromises)).filter(playlist => playlist !== null);
+
+    console.log('✅ Backend: Found', sharedWithMePlaylists.length, 'playlists shared with user');
+    res.json(sharedWithMePlaylists);
+
+  } catch (error) {
+    console.error('Error getting playlists shared with user:', error);
+    res.status(500).json({ error: 'Failed to get playlists shared with user' });
   }
 };

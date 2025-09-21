@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import PlaylistCard from '../components/PlaylistCard';
 import ThemeToggle from '../components/ThemeToggle';
-import { getUserPlaylists } from '../api';
+import { getUserPlaylists, getUserSharedPlaylistIds, getPlaylistsSharedWithMe } from '../api';
 import { getValidToken } from '../utils/auth';
 import { useCache } from '../contexts/CacheContext';
 
@@ -11,6 +11,8 @@ function Dashboard() {
   const [userProfile, setUserProfile] = useState(null);
   const [playlists, setPlaylists] = useState([]);
   const [allPlaylists, setAllPlaylists] = useState([]);
+  const [sharedPlaylistIds, setSharedPlaylistIds] = useState([]);
+  const [playlistsSharedWithMe, setPlaylistsSharedWithMe] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
@@ -32,26 +34,38 @@ function Dashboard() {
         // Strategy: Load user profile from cache instantly, fetch playlists based on cache status
         if (cachedUserProfile && cachedPlaylists) {
           // Both cached - fast load
-          console.log('📋 Loading from cache (user profile + playlists)...');
           if (mounted) {
             setUserProfile(cachedUserProfile);
             setAllPlaylists(cachedPlaylists);
             setPlaylists(cachedPlaylists);
             setLoading(false);
           }
+          
+          // Still need to fetch shared playlist IDs and playlists shared with me even when cached
+          try {
+            const [sharedResponse, sharedWithMeResponse] = await Promise.all([
+              getUserSharedPlaylistIds(),
+              getPlaylistsSharedWithMe()
+            ]);
+            
+            if (mounted) {
+              setSharedPlaylistIds(sharedResponse.data.sharedPlaylistIds);
+              setPlaylistsSharedWithMe(sharedWithMeResponse.data);
+            }
+          } catch (sharedError) {
+            console.warn('Failed to load shared playlist data (cache path):', sharedError);
+          }
           return;
         }
 
         if (cachedUserProfile && !cachedPlaylists) {
           // Profile cached, playlists cleared (after playlist visit or comment activity)
-          console.log('👤 User profile cached, fetching fresh playlists for updated badge status...');
           if (mounted) {
             setUserProfile(cachedUserProfile); // Show profile immediately
             setLoading(true); // Keep loading for playlists
           }
         } else {
           // Full cache miss
-          console.log('🆕 Cache miss, fetching fresh data...');
           setLoading(true);
           setError(null);
         }
@@ -120,6 +134,22 @@ function Dashboard() {
               cache.setPlaylists(playlistsData);
               console.log('✅ Fresh playlists loaded with updated comment status');
             }
+
+            // Always fetch shared playlist data (not cached)
+            try {
+              const [sharedResponse, sharedWithMeResponse] = await Promise.all([
+                getUserSharedPlaylistIds(),
+                getPlaylistsSharedWithMe()
+              ]);
+              
+              setSharedPlaylistIds(sharedResponse.data.sharedPlaylistIds);
+              setPlaylistsSharedWithMe(sharedWithMeResponse.data);
+              console.log('✅ Shared playlist IDs loaded:', sharedResponse.data.sharedPlaylistIds.length, 'ids');
+              console.log('✅ Playlists shared with me loaded:', sharedWithMeResponse.data.length, 'playlists');
+            } catch (sharedError) {
+              console.warn('Failed to load shared playlist data:', sharedError);
+              // Don't fail the whole page if shared playlist data can't be loaded
+            }
             
             setLoading(false);
           }
@@ -168,28 +198,39 @@ function Dashboard() {
 
   // Filter playlists based on ownership and comments
   const applyFilters = useCallback(() => {
-    if (!userProfile || !allPlaylists.length) return;
+    if (!userProfile) return;
     
-    let filtered = [...allPlaylists];
+    let filtered = [];
     
-    // Apply ownership filter
+    // Apply ownership and sharing filter
     switch (filter) {
       case 'owned':
-        filtered = filtered.filter(playlist => playlist.owner.id === userProfile.id);
+        filtered = allPlaylists.filter(playlist => playlist.owner.id === userProfile.id);
         break;
       case 'saved':
-        filtered = filtered.filter(playlist => playlist.owner.id !== userProfile.id);
+        filtered = allPlaylists.filter(playlist => playlist.owner.id !== userProfile.id);
         break;
+      case 'shared-by-me':
+        // Filter existing playlists to show only those that have been shared
+        console.log('🔍 Filtering for shared playlists. IDs:', sharedPlaylistIds);
+        filtered = allPlaylists.filter(playlist => sharedPlaylistIds.includes(playlist.id));
+        console.log('✅ Found', filtered.length, 'shared playlists');
+        break;
+      case 'shared-with-me':
+        // Show playlists that others have shared with me
+        console.log('🔍 Filtering for playlists shared with me:', playlistsSharedWithMe.length);
+        filtered = [...playlistsSharedWithMe];
+        console.log('✅ Found', filtered.length, 'playlists shared with me');
+        break;
+      case 'all':
       default:
-        // 'all' - no filtering needed
+        // 'all' - show regular playlists only (not shared)
+        filtered = [...allPlaylists];
         break;
     }
     
-    // Apply comment filter
-    // Comment filtering removed - only showing playlists now
-    
     setPlaylists(filtered);
-  }, [filter, allPlaylists, userProfile]);
+  }, [filter, allPlaylists, sharedPlaylistIds, playlistsSharedWithMe, userProfile]);
 
   // Filter playlists based on ownership
   const filterPlaylists = (filterType) => {
@@ -206,6 +247,8 @@ function Dashboard() {
     switch (filter) {
       case 'owned': return 'My Playlists';
       case 'saved': return 'Saved Playlists';
+      case 'shared-by-me': return 'Shared by Me';
+      case 'shared-with-me': return 'Shared with Me';
       default: return 'All Playlists';
     }
   };
@@ -286,9 +329,21 @@ function Dashboard() {
                 </button>
                 <button
                   onClick={() => filterPlaylists('saved')}
-                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 rounded-b-lg ${filter === 'saved' ? 'bg-green-50 dark:bg-green-900 text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${filter === 'saved' ? 'bg-green-50 dark:bg-green-900 text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}
                 >
                   Saved Playlists
+                </button>
+                <button
+                  onClick={() => filterPlaylists('shared-by-me')}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 ${filter === 'shared-by-me' ? 'bg-green-50 dark:bg-green-900 text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}
+                >
+                  Shared by Me
+                </button>
+                <button
+                  onClick={() => filterPlaylists('shared-with-me')}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 rounded-b-lg ${filter === 'shared-with-me' ? 'bg-green-50 dark:bg-green-900 text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}
+                >
+                  Shared with Me
                 </button>
               </div>
             )}

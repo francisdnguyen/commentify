@@ -115,17 +115,17 @@ router.get("/callback", async (req, res) => {
       };
 
       // Redirect to frontend with tokens
-      res.redirect(`http://localhost:3000/auth-callback?${querystring.stringify({
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth-callback?${querystring.stringify({
         access_token,
         refresh_token,
         expires_in
       })}`);
     } catch (error) {
       console.error("Error during token exchange:", error.response?.data || error.message);
-      res.redirect(`http://localhost:3000?error=${encodeURIComponent('Failed to authenticate with Spotify')}`);
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}?error=${encodeURIComponent('Failed to authenticate with Spotify')}`);
     }
   } else {
-    res.redirect(`http://localhost:3000/auth-error`);
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth-error`);
   }
 });
 

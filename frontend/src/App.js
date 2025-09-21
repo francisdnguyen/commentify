@@ -17,7 +17,7 @@ function App() {
       <CacheProvider>
         <Router>
           <Routes>
-            <Route path="/auth-callback" element={<AuthCallback />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/about" element={<About />} />
             <Route path="/contact" element={<Contact />} />

@@ -21,6 +21,16 @@ function PlaylistDetail() {
   const [selectedSong, setSelectedSong] = useState(null);
   const [songComments, setSongComments] = useState({});
 
+  // Track which comments the user has seen (by comment ID)
+  const [seenComments, setSeenComments] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`seenComments_${playlistId}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
   // Share modal state
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
@@ -28,12 +38,47 @@ function PlaylistDetail() {
   const [currentPage, setCurrentPage] = useState(1);
   const songsPerPage = 50;
 
+  // Filter state for tracks
+  const [trackFilter, setTrackFilter] = useState('all'); // 'all', 'new-comments', 'by-activity'
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+
   // Function to decode HTML entities
   const decodeHtmlEntities = (text) => {
     if (!text) return text;
     const textarea = document.createElement('textarea');
     textarea.innerHTML = text;
     return textarea.value;
+  };
+
+  // Helper function to check if a track has new comments (unseen comments from other users)
+  const hasNewComments = (trackId) => {
+    const comments = songComments[trackId] || [];
+    if (comments.length === 0) return false;
+    
+    const currentUserName = user?.display_name || user?.displayName;
+    
+    return comments.some(comment => {
+      const isNotOwnComment = comment.author !== currentUserName;
+      const isUnseen = !seenComments.has(comment.id);
+      return isNotOwnComment && isUnseen;
+    });
+  };
+
+  // Helper function to get the most recent unseen comment timestamp for a track (excluding own comments)
+  const getMostRecentCommentTime = (trackId) => {
+    const comments = songComments[trackId] || [];
+    if (comments.length === 0) return 0;
+    
+    const currentUserName = user?.display_name || user?.displayName;
+    const unseenOtherUsersComments = comments.filter(comment => {
+      const isNotOwnComment = comment.author !== currentUserName;
+      const isUnseen = !seenComments.has(comment.id);
+      return isNotOwnComment && isUnseen;
+    });
+    
+    if (unseenOtherUsersComments.length === 0) return 0;
+    
+    return Math.max(...unseenOtherUsersComments.map(comment => new Date(comment.timestamp).getTime()));
   };
 
   useEffect(() => {
@@ -148,15 +193,60 @@ function PlaylistDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playlistId]); // Remove cache dependency to prevent infinite loops
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isFilterDropdownOpen && !event.target.closest('.filter-dropdown')) {
+        setIsFilterDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isFilterDropdownOpen]);
+
+  // Save seen comments to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(`seenComments_${playlistId}`, JSON.stringify([...seenComments]));
+    } catch (error) {
+      console.warn('Failed to save seen comments to localStorage:', error);
+    }
+  }, [seenComments, playlistId]);
+
   // Modal functions
   const openSongModal = (song) => {
     setSelectedSong(song);
     setIsModalOpen(true);
+    
+    // Mark all comments for this song as seen when opening the modal
+    markCommentsAsSeen(song.id);
   };
 
   const closeSongModal = () => {
     setIsModalOpen(false);
     setSelectedSong(null);
+  };
+
+  // Function to mark comments as seen for a specific track
+  const markCommentsAsSeen = (trackId) => {
+    const comments = songComments[trackId] || [];
+    const currentUserName = user?.display_name || user?.displayName;
+    
+    // Get IDs of comments from other users
+    const otherUsersCommentIds = comments
+      .filter(comment => comment.author !== currentUserName)
+      .map(comment => comment.id);
+    
+    if (otherUsersCommentIds.length > 0) {
+      setSeenComments(prev => {
+        const newSeenComments = new Set(prev);
+        otherUsersCommentIds.forEach(id => newSeenComments.add(id));
+        return newSeenComments;
+      });
+    }
   };
 
   const addSongComment = async (songId, commentText) => {
@@ -226,12 +316,27 @@ function PlaylistDetail() {
     }
   };
 
-  // Pagination logic
-  const totalSongs = playlist?.tracks?.items?.length || 0;
+  // Pagination logic with filtering
+  const allTracks = playlist?.tracks?.items || [];
+  
+  // Apply filtering
+  let filteredTracks = allTracks;
+  if (trackFilter === 'new-comments') {
+    filteredTracks = allTracks.filter(item => item?.track && hasNewComments(item.track.id));
+  } else if (trackFilter === 'by-activity') {
+    filteredTracks = [...allTracks].sort((a, b) => {
+      if (!a?.track || !b?.track) return 0;
+      const aTime = getMostRecentCommentTime(a.track.id);
+      const bTime = getMostRecentCommentTime(b.track.id);
+      return bTime - aTime; // Most recent first
+    });
+  }
+  
+  const totalSongs = filteredTracks.length;
   const totalPages = Math.ceil(totalSongs / songsPerPage);
   const startIndex = (currentPage - 1) * songsPerPage;
   const endIndex = startIndex + songsPerPage;
-  const currentSongs = playlist?.tracks?.items?.slice(startIndex, endIndex) || [];
+  const currentSongs = filteredTracks.slice(startIndex, endIndex);
 
   const goToNextPage = () => {
     if (currentPage < totalPages) {
@@ -249,6 +354,13 @@ function PlaylistDetail() {
     if (pageNumber >= 1 && pageNumber <= totalPages) {
       setCurrentPage(pageNumber);
     }
+  };
+
+  // Filter change handler - reset to page 1 when filter changes
+  const handleFilterChange = (newFilter) => {
+    setTrackFilter(newFilter);
+    setCurrentPage(1);
+    setIsFilterDropdownOpen(false);
   };
 
   if (loading) return (
@@ -328,10 +440,88 @@ function PlaylistDetail() {
         {/* Tracks List */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Tracks</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Tracks</h2>
+              
+              {/* Filter Dropdown */}
+              <div className="relative filter-dropdown">
+                <button
+                  onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
+                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white transition-colors duration-200"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  {trackFilter === 'all' && 'All Tracks'}
+                  {trackFilter === 'new-comments' && 'New Comments'}
+                  {trackFilter === 'by-activity' && 'By Activity'}
+                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {isFilterDropdownOpen && (
+                  <div className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-10">
+                    <div className="py-1">
+                      <button
+                        onClick={() => handleFilterChange('all')}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 ${
+                          trackFilter === 'all' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center">
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                          </svg>
+                          All Tracks
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 ml-6">Show all tracks in playlist</div>
+                      </button>
+                      
+                      <button
+                        onClick={() => handleFilterChange('new-comments')}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 ${
+                          trackFilter === 'new-comments' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center">
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                          </svg>
+                          New Comments
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 ml-6">Unseen comments from others</div>
+                      </button>
+                      
+                      <button
+                        onClick={() => handleFilterChange('by-activity')}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 ${
+                          trackFilter === 'by-activity' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center">
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v3H8V5z" />
+                          </svg>
+                          Sort by Activity
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 ml-6">Most recent comments first</div>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {totalSongs > songsPerPage && (
               <div className="text-sm text-gray-500 dark:text-gray-400">
                 Showing {startIndex + 1}-{Math.min(endIndex, totalSongs)} of {totalSongs} tracks
+                {trackFilter !== 'all' && (
+                  <span className="ml-1 text-blue-600 dark:text-blue-400">
+                    (filtered)
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -343,11 +533,14 @@ function PlaylistDetail() {
               const track = item.track;
               const globalIndex = startIndex + index + 1;
               const commentCount = songComments[track.id]?.length || 0;
+              const trackHasNewComments = hasNewComments(track.id);
               
               return (
                 <div
                   key={track.id || index}
-                  className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 group cursor-pointer"
+                  className={`flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 group cursor-pointer ${
+                    trackHasNewComments ? 'bg-blue-50/30 dark:bg-blue-900/10 border-l-4 border-blue-500' : ''
+                  }`}
                   onClick={() => openSongModal(track)}
                 >
                   <div className="flex items-center space-x-4 flex-1">
@@ -380,14 +573,22 @@ function PlaylistDetail() {
                         e.stopPropagation();
                         openSongModal(track);
                       }}
-                      className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-gray-600 rounded-full relative transition-colors duration-200"
-                      title="View comments"
+                      className={`p-2 hover:bg-white dark:hover:bg-gray-600 rounded-full relative transition-colors duration-200 ${
+                        trackHasNewComments 
+                          ? 'text-orange-500 hover:text-orange-600 dark:text-orange-400 dark:hover:text-orange-300' 
+                          : 'text-gray-400 hover:text-blue-600 dark:hover:text-blue-400'
+                      }`}
+                      title={trackHasNewComments ? "Unseen comments!" : "View comments"}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                       </svg>
                       {commentCount > 0 && (
-                        <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        <span className={`absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center ${
+                          trackHasNewComments 
+                            ? 'bg-orange-500 animate-pulse' 
+                            : 'bg-blue-600'
+                        }`}>
                           {commentCount}
                         </span>
                       )}

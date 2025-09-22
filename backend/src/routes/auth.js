@@ -115,7 +115,7 @@ router.get("/callback", async (req, res) => {
       };
 
       // Redirect to frontend with tokens
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth-callback?${querystring.stringify({
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/callback?${querystring.stringify({
         access_token,
         refresh_token,
         expires_in

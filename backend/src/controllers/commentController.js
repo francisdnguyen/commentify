@@ -67,20 +67,31 @@ export const deleteComment = async (req, res) => {
     const { commentId } = req.params;
     const userId = req.user.id;
 
+    console.log('🗑️  Delete comment attempt:', { commentId, userId });
+
     const comment = await Comment.findById(commentId);
     if (!comment) {
+      console.log('❌ Comment not found:', commentId);
       return res.status(404).json({ error: 'Comment not found' });
     }
 
+    console.log('📝 Found comment:', { 
+      commentId: comment._id, 
+      commentUserId: comment.user.toString(), 
+      requestUserId: userId 
+    });
+
     // Check if user is the comment author
     if (comment.user.toString() !== userId) {
+      console.log('🚫 Authorization failed - user mismatch');
       return res.status(403).json({ error: 'Not authorized to delete this comment' });
     }
 
-    await comment.remove();
+    await Comment.findByIdAndDelete(commentId);
+    console.log('✅ Comment deleted successfully');
     res.json({ message: 'Comment deleted successfully' });
   } catch (error) {
-    console.error('Error deleting comment:', error);
+    console.error('❌ Error deleting comment:', error);
     res.status(500).json({ error: 'Failed to delete comment' });
   }
 };

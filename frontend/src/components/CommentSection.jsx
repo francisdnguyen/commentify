@@ -185,7 +185,7 @@ const CommentSection = ({ playlistId }) => {
                     )}
                   </div>
                   {/* Only show edit/delete buttons for the current user's comments */}
-                  {currentUser && comment.user && comment.user._id === currentUser.id && (
+                  {currentUser && comment.user && comment.user.spotifyId === currentUser.id && (
                     <div className="flex gap-2">
                       <button
                         onClick={() => setEditingComment(comment._id)}

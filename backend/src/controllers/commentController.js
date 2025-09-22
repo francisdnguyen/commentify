@@ -26,7 +26,7 @@ export const addComment = async (req, res) => {
     });
 
     // Populate user info
-    await comment.populate('user', 'displayName');
+    await comment.populate('user', 'displayName spotifyId');
 
     res.status(201).json(comment);
   } catch (error) {
@@ -51,7 +51,7 @@ export const getComments = async (req, res) => {
       playlist: playlist._id,
       trackId: { $in: [null, undefined] }
     })
-      .populate('user', 'displayName')
+      .populate('user', 'displayName spotifyId')
       .sort({ createdAt: -1 });
 
     res.json(comments);
@@ -148,7 +148,7 @@ export const addSongComment = async (req, res) => {
     });
 
     // Populate user info
-    await comment.populate('user', 'displayName');
+    await comment.populate('user', 'displayName spotifyId');
 
     res.status(201).json(comment);
   } catch (error) {
@@ -173,7 +173,7 @@ export const getSongComments = async (req, res) => {
       playlist: playlist._id,
       trackId: trackId 
     })
-      .populate('user', 'displayName')
+      .populate('user', 'displayName spotifyId')
       .sort('-createdAt');
 
     res.json(comments);
@@ -199,7 +199,7 @@ export const getAllSongCommentsForPlaylist = async (req, res) => {
       playlist: playlist._id,
       trackId: { $exists: true, $ne: null }
     })
-      .populate('user', 'displayName')
+      .populate('user', 'displayName spotifyId')
       .sort('-createdAt');
 
     // Group comments by trackId

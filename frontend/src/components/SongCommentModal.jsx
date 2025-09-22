@@ -118,7 +118,7 @@ function SongCommentModal({
                         <p className="text-gray-700 dark:text-gray-300">{comment.text}</p>
                       </div>
                       {/* Delete button - only show for user's own comments */}
-                      {!isSharedPlaylist && user && comment.user && comment.user._id === user.id && onDeleteComment && (
+                      {!isSharedPlaylist && user && comment.user && comment.user.spotifyId === user.id && onDeleteComment && (
                         <button
                           onClick={() => onDeleteComment(comment._id)}
                           className="ml-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors duration-200"

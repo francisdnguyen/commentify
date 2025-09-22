@@ -51,6 +51,7 @@ router.delete('/comments/:commentId', authenticateToken, deleteComment);
 // Song comment routes
 router.get('/playlists/:playlistId/songs/:trackId/comments', authenticateToken, getSongComments);
 router.post('/playlists/:playlistId/songs/:trackId/comments', authenticateToken, addSongComment);
+router.delete('/playlists/:playlistId/songs/:trackId/comments/:commentId', authenticateToken, deleteComment);
 router.get('/playlists/:playlistId/song-comments', authenticateToken, getAllSongCommentsForPlaylist);
 
 // Sharing routes (authenticated)

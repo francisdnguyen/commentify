@@ -66,6 +66,10 @@ export const getSongComments = (playlistId, trackId) => {
   return api.get(`/api/playlists/${playlistId}/songs/${trackId}/comments`);
 };
 
+export const deleteSongComment = (playlistId, trackId, commentId) => {
+  return api.delete(`/api/playlists/${playlistId}/songs/${trackId}/comments/${commentId}`);
+};
+
 export const getAllSongCommentsForPlaylist = (playlistId) => {
   return api.get(`/api/playlists/${playlistId}/song-comments`);
 };

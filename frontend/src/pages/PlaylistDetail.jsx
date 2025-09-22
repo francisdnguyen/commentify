@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getPlaylistDetails, getUserProfile, getAllSongCommentsForPlaylist, addSongComment as apiAddSongComment, markPlaylistAsViewed } from '../api';
+import { getPlaylistDetails, getUserProfile, getAllSongCommentsForPlaylist, addSongComment as apiAddSongComment, deleteSongComment as apiDeleteSongComment, markPlaylistAsViewed } from '../api';
 import CommentSection from '../components/CommentSection';
 import ThemeToggle from '../components/ThemeToggle';
 import SongCommentModal from '../components/SongCommentModal';
@@ -179,11 +179,13 @@ function PlaylistDetail() {
           const transformedComments = {};
           Object.keys(rawComments).forEach(trackId => {
             transformedComments[trackId] = rawComments[trackId].map(comment => ({
+              _id: comment._id,
               id: comment._id,
               text: comment.content,
               author: comment.user?.displayName || comment.anonymousName || 'Anonymous',
               timestamp: comment.createdAt,
-              songId: trackId
+              songId: trackId,
+              user: comment.user // Preserve user object for ownership checks
             }));
           });
           
@@ -297,11 +299,13 @@ function PlaylistDetail() {
       setSongComments(prev => ({
         ...prev,
         [songId]: [...(prev[songId] || []), {
+          _id: newComment._id,
           id: newComment._id,
           text: newComment.content,
           author: newComment.user?.displayName || 'Anonymous',
           timestamp: newComment.createdAt,
-          songId: songId
+          songId: songId,
+          user: newComment.user // Include user object for ownership checks
         }]
       }));
 
@@ -349,6 +353,32 @@ function PlaylistDetail() {
         ...prev,
         [songId]: [...(prev[songId] || []), newComment]
       }));
+    }
+  };
+
+  const deleteSongComment = async (commentId) => {
+    try {
+      // Find the song ID for this comment
+      const songId = selectedSong?.id;
+      if (!songId) {
+        console.error('No song selected for comment deletion');
+        return;
+      }
+
+      // Delete comment from backend
+      console.log('Deleting comment from backend...');
+      await apiDeleteSongComment(playlistId, songId, commentId);
+
+      // Update local state to remove the comment immediately
+      setSongComments(prev => ({
+        ...prev,
+        [songId]: (prev[songId] || []).filter(comment => comment.id !== commentId)
+      }));
+
+      console.log('✅ Comment deleted successfully');
+    } catch (error) {
+      console.error('Error deleting song comment:', error);
+      alert('Failed to delete comment. Please try again.');
     }
   };
 
@@ -711,6 +741,8 @@ function PlaylistDetail() {
         playlistId={playlistId}
         comments={selectedSong ? songComments[selectedSong.id] || [] : []}
         onAddComment={addSongComment}
+        onDeleteComment={deleteSongComment}
+        user={user}
       />
 
       {/* Share Modal */}

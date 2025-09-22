@@ -9,9 +9,19 @@ function AuthCallback() {
     const handleAuth = async () => {
       try {
         const params = new URLSearchParams(window.location.search);
+        
+        // Debug: Log all URL parameters
+        console.log('Full URL:', window.location.href);
+        console.log('URL parameters:', window.location.search);
+        for (let [key, value] of params.entries()) {
+          console.log(`Param ${key}:`, value);
+        }
+        
         const access_token = params.get('access_token');
         const refresh_token = params.get('refresh_token');
         const expires_in = params.get('expires_in');
+
+        console.log('Extracted tokens:', { access_token: access_token ? 'present' : 'missing', refresh_token: refresh_token ? 'present' : 'missing', expires_in });
 
         if (!access_token || !refresh_token) {
           throw new Error('Missing authentication tokens');

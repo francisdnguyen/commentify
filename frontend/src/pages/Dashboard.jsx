@@ -143,8 +143,6 @@ function Dashboard() {
               
               setSharedPlaylistIds(sharedResponse.data.sharedPlaylistIds);
               setPlaylistsSharedWithMe(sharedWithMeResponse.data);
-              console.log('✅ Shared playlist IDs loaded:', sharedResponse.data.sharedPlaylistIds.length, 'ids');
-              console.log('✅ Playlists shared with me loaded:', sharedWithMeResponse.data.length, 'playlists');
             } catch (sharedError) {
               console.warn('Failed to load shared playlist data:', sharedError);
               // Don't fail the whole page if shared playlist data can't be loaded

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getPlaylistComments, addComment, editComment, deleteComment, markPlaylistAsViewed } from '../api';
+import { getPlaylistComments, addComment, editComment, deleteComment, markPlaylistAsViewed, getUserProfile } from '../api';
 import { useCache } from '../contexts/CacheContext';
 
 const CommentSection = ({ playlistId }) => {
@@ -8,6 +8,7 @@ const CommentSection = ({ playlistId }) => {
   const [editingComment, setEditingComment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const cache = useCache();
 
   const fetchComments = useCallback(async () => {
@@ -25,6 +26,16 @@ const CommentSection = ({ playlistId }) => {
 
   useEffect(() => {
     fetchComments();
+    // Fetch current user profile
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await getUserProfile();
+        setCurrentUser(response.data);
+      } catch (err) {
+        console.error('Error fetching user profile:', err);
+      }
+    };
+    fetchCurrentUser();
   }, [playlistId, fetchComments]);
 
   const handleSubmitComment = async (e) => {
@@ -173,20 +184,23 @@ const CommentSection = ({ playlistId }) => {
                       <span className="text-gray-500 text-sm ml-2">(edited)</span>
                     )}
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setEditingComment(comment._id)}
-                      className="text-gray-500 hover:text-gray-700"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteComment(comment._id)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  {/* Only show edit/delete buttons for the current user's comments */}
+                  {currentUser && comment.user && comment.user._id === currentUser.id && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setEditingComment(comment._id)}
+                        className="text-blue-500 hover:text-blue-700 text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteComment(comment._id)}
+                        className="text-red-500 hover:text-red-700 text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <p className="text-gray-700 whitespace-pre-wrap">{comment.content}</p>
               </>

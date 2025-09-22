@@ -132,7 +132,6 @@ function Dashboard() {
               setAllPlaylists(playlistsData);
               setPlaylists(playlistsData);
               cache.setPlaylists(playlistsData);
-              console.log('✅ Fresh playlists loaded with updated comment status');
             }
 
             // Always fetch shared playlist data (not cached)
